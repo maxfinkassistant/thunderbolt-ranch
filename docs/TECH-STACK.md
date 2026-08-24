@@ -1,4 +1,4 @@
-# Christensen Ranch — Tool Stack Recommendation
+# Thunderbolt Ranch — Tool Stack Recommendation
 
 *How to take this prototype to a paying, production storefront.*
 

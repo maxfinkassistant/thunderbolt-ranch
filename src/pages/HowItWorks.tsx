@@ -112,7 +112,7 @@ export default function HowItWorks() {
               ))}
             </div>
             <div className="pay-panel">
-              <span className="tag">Christensen Ranch, everything</span>
+              <span className="tag">Thunderbolt Ranch, everything</span>
               <div style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2.4rem,4vw,3.4rem)", lineHeight: 1, margin: "var(--space-sm) 0" }}>
                 ≈ {money2(ourRate)}<span style={{ fontSize: "1.2rem" }}>/lb</span>
               </div>

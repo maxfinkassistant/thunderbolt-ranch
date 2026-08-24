@@ -1,6 +1,6 @@
-# Christensen Ranch — Marketing Playbook
+# Thunderbolt Ranch — Marketing Playbook
 
-*Selling shares of Colorado-raised beef, delivered as a cut sheet the customer designs themselves.*
+*Selling shares of Colorado-raised beef — one decision, one honest price, cut to the ranch standard.*
 
 ---
 
@@ -21,7 +21,7 @@
 | Segment | Who | Hook | Where they are |
 |---|---|---|---|
 | Freezer families | Front Range parents, 30–55, own a chest freezer or will buy one | "A year of dinners, solved" + per-lb math | Facebook groups, Nextdoor, school networks |
-| BBQ hobbyists | Smoker owners, cut-obsessed | Packer brisket, custom thickness ribeyes, patty program | BBQ Facebook/Reddit, r/Denver, butcher counters |
+| BBQ hobbyists | Smoker owners, cut-obsessed | Whole packer brisket + dry-aged ribeyes at wholesale | BBQ Facebook/Reddit, r/Denver, butcher counters |
 | Values buyers | Know-your-farmer, anti-feedlot, homesteaders | The "never crosses a state line" story | Farmers markets, homesteading groups, local food co-ops |
 | **Group organizers** | The one friend who organizes everything | Split-a-cow: "get the whole-beef price without the whole cow" | They find *you* — give them tools |
 
@@ -47,10 +47,10 @@ The mechanics are already built into the site:
 1. **Google Business Profile + local SEO** — "beef shares Colorado", "quarter cow Denver", "half beef Greeley". Buyers search exactly these phrases with wallet in hand. The FAQ section on the site is written to win these queries; add a city-targeted FAQ/blog page per major town (Greeley, Fort Collins, Denver, Longmont).
 2. **Nextdoor + local Facebook groups** — the natural habitat of "anyone know a good beef guy?" threads. Don't advertise; answer. One helpful comment with the split-a-cow link outperforms paid.
 3. **Butcher partnership** — Colorado Custom's counter is a lead source: cards/QR at pickup ("liked your beef? reserve next season's animal"), and they refer walk-ins who want cut-to-order.
-4. **Farmers markets (seasonal)** — not to sell meat; to collect deposits. Bring the cut diagram on a banner, run the cut-sheet builder on an iPad, take $200 deposits on the spot.
+4. **Farmers markets (seasonal)** — not to sell meat; to collect deposits. Bring the steer diagram on a banner, run the price-comparison page on an iPad, take $200 deposits on the spot.
 5. **Email + SMS lifecycle** — deadline-driven. Four harvests a year = four natural campaigns: "Order by Sep 8 for September beef. 3 shares left." Real scarcity, real dates, no manufactured urgency.
-6. **Local media/newsletters** — Denver/NoCo food newsletters and TV love a "family ranch does direct-to-consumer with a build-your-own cut sheet" story. Pitch once per season.
-7. **Paid (later)** — Meta lead ads geo-fenced to Front Range, creative = the cow diagram + "$0 until you choose every cut" framing. Only after organic + referral loops are humming.
+6. **Local media/newsletters** — Denver/NoCo food newsletters and TV love a "family ranch sells steakhouse beef direct at half the counter price" story. Pitch once per season.
+7. **Paid (later)** — Meta lead ads geo-fenced to Front Range, creative = the steer diagram + "ribeye at a rancher's price" framing. Only after organic + referral loops are humming.
 
 ## 5. Content that does the selling
 
@@ -58,7 +58,7 @@ The mechanics are already built into the site:
 - **What's-in-the-box explainers** — the clickable steer map ("tap the rib: 8–12 ribeyes in a half") as short videos/reels.
 - **Freezer math calculator** — already on the site (per-lb all-in, per share size).
 - **Harvest diary** — one photo email per season stage (pasture → trailer → dry-age room → boxes). Farm-to-table proof, zero writing effort.
-- **Recipes by cut** — one per decision section; doubles as SEO surface ("what to do with beef shank").
+- **Recipes by cut** — one per section of the steer; doubles as SEO surface ("what to do with beef shank").
 
 ## 6. Seasonal calendar (built-in urgency)
 
@@ -87,6 +87,6 @@ The mechanics are already built into the site:
 
 **Days 1–30 — Foundation.** Confirm real pricing (kill the placeholders), refund policy, storage terms. Stand up Google Business Profile, claim socials, launch the site on a real domain with Stripe deposits live. Seed 3 pilot groups from friends/family to generate real photos and testimonials.
 
-**Days 31–60 — Local proof.** First farmers-market booth with iPad ordering. Butcher-counter cards live at Colorado Custom. Publish 4 cut-explainer posts + city SEO pages. Start the lifecycle emails for the next harvest deadline.
+**Days 31–60 — Local proof.** First farmers-market booth with iPad ordering. Butcher-counter cards live at Colorado Custom. Publish 4 what's-in-the-box posts + city SEO pages. Start the lifecycle emails for the next harvest deadline.
 
 **Days 61–90 — The loop.** Turn on 3/4-group nudge automations and the organizer perk. Pitch two local newsletters. Review-ask automation. Measure group-attributed revenue; double down on whatever fills cows.

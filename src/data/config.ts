@@ -1,5 +1,5 @@
 /* ============================================================
-   Christensen Ranch — product & pricing configuration
+   Thunderbolt Ranch — product & pricing configuration
    Processor: Colorado Custom Meat Co, Kersey CO. Pickup only.
 
    ⚠ Rates marked PLACEHOLDER must be confirmed with the ranch

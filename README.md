@@ -1,4 +1,4 @@
-# Christensen Ranch — Bulk Beef Storefront
+# Thunderbolt Ranch — Bulk Beef Storefront
 
 Consumer site for selling shares of Colorado-raised beef: customers reserve a quarter, half, or whole animal, design their own cut sheet, and pick up at Colorado Custom Meat Co in Kersey, CO. Groups can split one cow via shareable referral links and everyone gets the whole-beef rate when it fills.
 

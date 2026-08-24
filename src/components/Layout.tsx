@@ -9,7 +9,7 @@ export default function Layout() {
       </div>
       <header className="site-header">
         <Link to="/" className="brand">
-          <div className="brand-name">Christensen Ranch</div>
+          <div className="brand-name">Thunderbolt Ranch</div>
           <div className="brand-sub">BULK BEEF · NORTHEAST COLORADO</div>
         </Link>
         <nav className="site-nav">
@@ -23,7 +23,7 @@ export default function Layout() {
       <Outlet />
 
       <footer className="site-footer">
-        <div>CHRISTENSEN RANCH · BEEF QUESTIONS {RANCH_PHONE}</div>
+        <div>THUNDERBOLT RANCH · BEEF QUESTIONS {RANCH_PHONE}</div>
         <div>PICKUP &amp; PROCESSING: {PROCESSOR.name.toUpperCase()} {PROCESSOR.phone}</div>
         <div>{PROCESSOR.address.toUpperCase()}</div>
       </footer>
