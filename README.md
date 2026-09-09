@@ -1,8 +1,12 @@
-# Thunderbolt Ranch — Bulk Beef Storefront
+# Thunderbolt Ranch — Beef Storefront (Gen 1)
 
-Consumer site for selling shares of Colorado-raised beef: customers reserve a quarter, half, or whole animal, design their own cut sheet, and pick up at Colorado Custom Meat Co in Kersey, CO. Groups can split one cow via shareable referral links and everyone gets the whole-beef rate when it fills.
+Ranch-to-table storefront for one Colorado Angus harvest: customers reserve a quarter,
+half, or whole, build a custom cut sheet through a guided wizard, and the site fills out
+Colorado Custom Meat Co's official cutting-instructions PDF from their answers.
 
-Built from the original cut-sheet prototype artifact; expanded into a full multi-page app.
+Pricing and language follow the Thunderbolt Ranch one-pager: $6/lb hanging weight,
+≈$8.57/lb take-home, $250 deposit for any size, October 2026 harvest, order by Sept 30,
+pickup only in Kersey, payment to Thunderbolt Ranch LLC.
 
 ## Run it
 
@@ -11,28 +15,27 @@ bun install
 bun run dev        # http://localhost:5176
 ```
 
-## What's here
+`bun run build` produces a single self-contained `dist/index.html` (demo-shareable).
 
-No custom cuts — every share is cut to the ranch's standard cut sheet (`STANDARD_CUT` in config); marketing leads with the discounted all-in $/lb vs store per-cut prices.
+## Routes
 
 | Route | Page |
 |---|---|
-| `/` | Landing — price-led hero, one-price comparison strip, photo steer map with per-share yield popups, Colorado farm-to-table story, shares, harvest calendar, FAQ |
-| `/how-it-works` | 5-step process walkthrough, price-math comparison table, what's-in-the-box (steer map + standard cut list), logistics |
-| `/order` | 2-step order flow: share & month → review (estimated box + standard cut + full cost estimate) & deposit |
-| `/order?group=CODE` | Same flow joining a split-a-cow group (locks month, limits share size to open quarters, applies whole-beef rate) |
-| `/split` | Split-a-cow explainer + create a group |
-| `/split/:code` | Group page — steer fills quarter-by-quarter, member list, shareable claim link |
-| `/track` / `/track/:code` | Order lookup + status timeline with the full cut ticket |
+| `/` | Landing — hero + Angus primal map (tap for per-share yields), price strip vs USDA average, pasture-to-freezer weights, pricing cards, timeline & who-you-pay |
+| `/how-it-works` | 5-step walkthrough, USDA price comparison, what's-in-the-box |
+| `/order` | Share pick → 13-question cut-sheet wizard (explainers + live min–max counts, thickness-aware) → review & $250 deposit → confirmation with filled CCMC PDF download |
+| `/track/:code` | Status timeline + estimated box + cut-sheet PDF |
+| `/customers` | Back office (passcode `KERSEY`, placeholder): roster w/ status control, per-order CCMC PDFs, customer notes, CSV export |
 
-## Structure
+## Key files
 
-- `src/data/config.ts` — shares, pricing, harvest dates, cut decisions, photos. **All placeholder rates are flagged here.**
-- `src/lib/store.ts` — data layer (orders, groups). localStorage today; function signatures mirror the planned Supabase tables (see `docs/TECH-STACK.md`). Seeds one sample group (`HNDRSN`) + orders on first run.
-- `src/lib/yield.ts` — take-home weight and cost estimates.
-- `src/components/Cow.tsx` — interactive primal diagram (silhouette + clipped regions). `CowMeter.tsx` — the group-fill progress steer.
-- `src/pages/` — Landing, Order, Split, Group, Track.
-- `docs/MARKETING-PLAYBOOK.md` — positioning, split-a-cow growth loop, channels, seasonal calendar, 30/60/90.
-- `docs/TECH-STACK.md` — hosting/payments/database recommendation and Supabase migration path.
+- `src/data/config.ts` — pricing, harvest dates, wizard schema, yield estimates (butcher should sanity-check), approved brand claims
+- `src/lib/store.ts` — orders in localStorage (v2 keys), shaped for a backend swap
+- `src/lib/estimate.ts` — box summary + count math; `src/lib/cutsheetPdf.ts` — fills `public/ccmc-cut-sheet.pdf` via pdf-lib
+- `src/components/SteerMap.tsx` — Angus photo (public-domain, warm-toned, `public/angus-steer.jpg`) with traced SVG overlays
+- `gen2/` — split-a-cow group buying, built but unrouted (Gen 2)
+- `docs/` — marketing playbook, launch checklist, tech stack
 
-Photography is royalty-free Unsplash, hotlinked — swap for ranch photos before launch.
+Claims policy: only one-pager language (grain finished, pasture raised, Ranch to Table,
+one Angus animal, Colorado, conception-to-harvest ownership). Photography is royalty-free
+stand-ins until ranch photos exist.

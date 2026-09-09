@@ -1,61 +1,41 @@
-# Thunderbolt Ranch — Go-Live Checklist
+# Thunderbolt Ranch — Go-Live Checklist (Gen 1)
 
-*Critical path: pricing confirmation → Supabase swap → Stripe → email → everything else.
-Realistically 3–4 weeks to launch once pricing is confirmed.*
+*The order window closes **Sept 30** and it's early September — this is a two-week sprint,
+not a month-long build. Ship the minimum that takes real deposits.*
 
-## 1. Business decisions (blockers)
-- [ ] Confirm real pricing: deposits ($200/$400/$600 placeholders), hanging rates ($5.25/$4.95/$4.65), processing ($1.05/lb) — all in `src/data/config.ts`
-- [ ] Spot-check `STORE_COMPARE` grocery prices against a real Front Range store
-- [ ] Refund policy language; Colorado Custom storage terms (7 free days / $10/day); delivery radius
-- [ ] Real harvest dates + share capacity for the season
-- [ ] Ranch photography to replace stock (incl. broadside steer for the diagram re-trace)
-- [ ] LLC/DBA, terms of service, privacy policy page
+## Done (working in the demo)
+- [x] Pricing per the one-pager: $6/lb hanging, ≈$8.57/lb take-home, $250 deposit, Q/H/W $1,350/$2,700/$5,400
+- [x] Guided cut-sheet wizard (13 questions, explainers, thickness-aware min–max counts)
+- [x] Auto-filled CCMC cutting-instructions PDF (verified against the real form)
+- [x] Landing + How It Works aligned to one-pager language and claims
+- [x] Order tracking with status timeline; back-office CRM at /customers (roster, notes, CSV, CCMC PDFs)
+- [x] Gen 2 (split-a-cow) parked in `gen2/`; FAQ and delivery removed
 
-## 2. Infrastructure (week 1)
-- [ ] Domain + Cloudflare DNS; deploy to Vercel with HTTPS
-- [ ] Supabase: `orders` + `groups` tables (schema in TECH-STACK.md); swap `src/lib/store.ts` bodies
-- [ ] Server-side group-fill constraint (≤ 4 quarters; no double-claim races)
-- [ ] Admin view: orders per harvest + printable ticket per order for Colorado Custom
+## Week 1 — take real money
+- [ ] Domain + deploy to Vercel (site is one `bun run build` away)
+- [ ] Supabase for orders (schema mirrors `src/lib/store.ts`); swap localStorage bodies
+- [ ] Stripe Checkout for the $250 deposit; webhook marks order reserved
+- [ ] Real auth on /customers (replace the KERSEY passcode)
+- [ ] Confirmation email via Resend (order summary + cut-sheet PDF attached)
+- [ ] Remove the TR-SAMPLE1 seed order for production
+- [ ] Butcher sanity-check of the wizard's per-cut count estimates (`src/data/config.ts` yields)
+- [ ] Decide refund policy language for pre-deadline cancellations (deposit currently described as applying to total; confirm refundability wording)
 
-## 3. Payments — Stripe (week 2)
-- [ ] Stripe account under the business entity
-- [ ] Checkout for deposits (one price per share size); webhook marks order `reserved`
-- [ ] Refunds: full pre-deadline, credit post-deadline
-- [ ] Hanging-weight balance via Stripe Invoices once actual weight is known
-- [ ] Decide fee handling on balances (offer ACH — 0.8% capped — on $1,500+ invoices)
-- [ ] Test-mode end-to-end: reserve → webhook → email → refund
+## Week 2 — sell it
+- [ ] Google Business Profile live; site linked
+- [ ] Personal outreach wave (Josh's list) + Nextdoor/Facebook presence
+- [ ] Deadline emails scheduled: Sept 16 harvest note, Sept 23 one-week, Sept 28–30 final call
+- [ ] Cards/QR at Colorado Custom's counter
+- [ ] Mobile pass + a real $1 Stripe test end to end
 
-## 4. Email + SMS (week 2–3)
-- [ ] Resend/Postmark on the domain with SPF/DKIM
-- [ ] Templates: confirmation (with estimated-box ticket), weight+balance notice, pickup instructions, deadline reminders
-- [ ] Twilio: "group at 3/4, one quarter left" + pickup-day SMS
-- [ ] Group lifecycle: member joined, cow completed
+## Pickup week (Oct 1)
+- [ ] Email cut sheets to order@ccmeatco.com from /customers (one click per order)
+- [ ] Pickup logistics email: coolers, freezer space, $10/day storage after the grace week
+- [ ] Collect balances (checks to Thunderbolt Ranch LLC; Stripe invoice as backup)
+- [ ] Mark orders picked-up in /customers as they clear
 
-## 5. CRM — built into the site at /customers (DONE in demo; harden for launch)
-- [x] Harvest roster with per-order status control (drives customer tracking pages)
-- [x] Groups board with 3/4-full call list flags
-- [x] Customer rollup with notes + CSV export
-- [x] Printable butcher ticket per order
-- [ ] Replace the placeholder passcode gate with real auth (Supabase) at launch
-- [ ] Source tagging on every order (group link / direct / market) for attribution
-- [ ] +14 days post-pickup automation: review ask + next-season group CTA (via Resend)
-
-## 6. SEO (week 3–4, ongoing)
-- [ ] Per-route titles/meta, OG images, sitemap.xml, robots.txt; pre-render or SSG the landing + how-it-works routes
-- [ ] Schema.org: LocalBusiness + Product (shares w/ price) + FAQPage
-- [ ] Google Business Profile: category, service area, photos, harvest posts
-- [ ] City pages: beef shares Greeley / Fort Collins / Denver / Longmont
-- [ ] Keyword targets: "quarter cow Colorado", "half beef price", "buy beef in bulk Denver"
-- [ ] Content cadence: recipe/explainer per cut section (9 long-tail pages), harvest diary
-- [ ] Plausible/GA4 events: deposit paid, group created, group-link visit → claim
-
-## 7. Launch QA
-- [ ] Full mobile pass; cross-browser; keyboard/a11y through order flow
-- [ ] Real seed data; remove HNDRSN sample seeding for production
-- [ ] Real $1 Stripe test through the whole journey
-- [ ] 404 page, error states, "sold out" state for full months
-
-## 8. Launch week
-- [ ] Seed 2–3 real friends/family groups before public launch
-- [ ] GBP live, socials claimed, first Nextdoor/Facebook presence
-- [ ] Farmers-market kit: steer-diagram banner + iPad with live site
+## After Gen 1
+- [ ] "How was the first ribeye?" follow-up + next-harvest waitlist
+- [ ] SEO buildout (city pages, schema markup, recipes per cut)
+- [ ] Ranch photography to replace stock (including a broadside Angus for the steer map)
+- [ ] Gen 2: reactivate split-a-cow (group referral links) once a waitlist exists
