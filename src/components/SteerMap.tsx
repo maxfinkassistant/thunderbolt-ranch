@@ -1,14 +1,14 @@
-/* Photo-based primal map: a real steer side profile with the cut
-   regions overlaid as translucent, clickable SVG polygons.
+/* Photo-based primal map: an Angus steer side profile with the
+   cut regions overlaid as translucent, clickable SVG polygons.
 
-   Base photo: "Hereford bull large.jpg", Wikimedia Commons,
-   public domain — swap for a ranch photo at launch.           */
+   Base photo: public-domain Aberdeen Angus conformation photo
+   (DPLA / Wikimedia Commons), warm-toned to the brand palette.
+   Lives in /public — swap for a ranch photo when available.    */
 
-export const STEER_PHOTO =
-  "https://upload.wikimedia.org/wikipedia/commons/f/f3/Hereford_bull_large.jpg";
+export const STEER_PHOTO = "/angus-steer.jpg";
 
-/* Coordinates are in the photo's native 550 × 369 pixel space. */
-export const VIEW = { w: 550, h: 369 };
+/* Coordinates in the photo's 864 × 609 pixel space. */
+export const VIEW = { w: 864, h: 609 };
 
 interface Region {
   pts: string;
@@ -19,18 +19,18 @@ interface Region {
 }
 
 export const PHOTO_REGIONS: Record<string, Region> = {
-  chuck:   { pts: "140,34 186,56 215,56 215,196 160,188 128,152 131,96", cx: 178, cy: 122, name: "Chuck", fs: 10 },
-  rib:     { pts: "215,56 300,70 300,152 215,148", cx: 257, cy: 112, name: "Rib", fs: 10 },
-  loin:    { pts: "300,70 360,77 360,158 300,152", cx: 330, cy: 118, name: "Loin", fs: 9 },
-  sirloin: { pts: "360,77 420,68 420,162 360,158", cx: 390, cy: 118, name: "Sirloin", fs: 7.5 },
-  round:   { pts: "420,68 464,62 515,68 530,125 520,185 502,240 448,248 420,165", cx: 472, cy: 140, name: "Round", fs: 10 },
-  brisket: { pts: "131,175 215,192 215,230 152,208", cx: 178, cy: 207, name: "Brisket", fs: 7.5 },
-  plate:   { pts: "215,148 300,152 300,238 215,230", cx: 257, cy: 196, name: "Plate", fs: 8.5 },
-  flank:   { pts: "300,152 420,162 420,230 300,238", cx: 356, cy: 197, name: "Flank", fs: 9 },
-  shank:   { pts: "197,232 238,240 233,345 201,345", cx: 218, cy: 300, name: "Shank", fs: 7 },
+  chuck:   { pts: "195,155 320,150 320,330 230,330 195,240", cx: 262, cy: 245, name: "Chuck" },
+  rib:     { pts: "320,150 425,148 425,330 320,330", cx: 372, cy: 240, name: "Rib" },
+  loin:    { pts: "425,148 520,148 520,325 425,330", cx: 472, cy: 236, name: "Loin" },
+  sirloin: { pts: "520,148 600,150 600,320 520,325", cx: 560, cy: 234, name: "Sirloin", fs: 9.5 },
+  round:   { pts: "600,150 700,150 775,168 800,220 795,300 760,380 700,400 600,320", cx: 700, cy: 262, name: "Round" },
+  brisket: { pts: "230,330 320,330 320,420 250,402 218,360", cx: 276, cy: 372, name: "Brisket", fs: 8.5 },
+  plate:   { pts: "320,330 425,330 425,415 320,420", cx: 372, cy: 374, name: "Plate", fs: 9.5 },
+  flank:   { pts: "425,330 600,320 600,400 425,415", cx: 512, cy: 366, name: "Flank" },
+  shank:   { pts: "250,402 318,420 312,568 256,562", cx: 286, cy: 480, name: "Shank", fs: 8 },
 };
 
-const SHANK2 = "448,248 500,240 495,350 456,350";
+const SHANK2 = "662,398 748,386 738,568 672,568";
 
 export default function SteerMap({
   active,
@@ -46,7 +46,7 @@ export default function SteerMap({
       <svg
         viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
         role="img"
-        aria-label="Beef primal map over a steer photo"
+        aria-label="Beef primal map over an Angus steer photo"
       >
         <polygon
           points={SHANK2}
@@ -66,12 +66,12 @@ export default function SteerMap({
             key={k}
             x={r.cx} y={r.cy} textAnchor="middle"
             className="sm-label"
-            fontSize={r.fs ?? 11}
+            fontSize={r.fs ?? 12}
           >
             {r.name}
           </text>
         ))}
-        <text x={474} y={300} textAnchor="middle" className="sm-label" fontSize={7}>
+        <text x={706} y={480} textAnchor="middle" className="sm-label" fontSize={8}>
           Shank
         </text>
       </svg>

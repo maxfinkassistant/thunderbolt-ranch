@@ -1,61 +1,82 @@
 /* ============================================================
-   Local data layer. Persists to localStorage today; the shapes
-   and function signatures mirror what a Supabase backend would
-   expose (orders, groups tables) so it can be swapped without
-   touching the UI.
+   Local data layer. Persists to localStorage today; shapes and
+   signatures mirror the future backend so it can swap without
+   touching the UI. Keys bumped to v2 for the cut-sheet-wizard
+   order shape.
    ============================================================ */
 
-import { SHARES, DATES, DECISIONS, type ShareId } from "../data/config";
+import { MAIN_CUTS, EXTRA_GROUPS, type ShareId, type CutMode } from "../data/config";
 
-export type OrderStatus =
-  | "reserved"      // deposit paid, cut sheet editable until deadline
-  | "locked"        // past deadline, cut sheet sent to butcher
-  | "processing"    // animal delivered, at Colorado Custom
-  | "aging"         // dry aging
-  | "ready"         // ready for pickup
-  | "picked-up";
+/* ---------------- cut sheet answers ---------------- */
 
-export interface Order {
-  code: string;            // e.g. CR-4F7K2M
-  createdAt: string;
-  status: OrderStatus;
-  share: ShareId;
-  dateId: string;
-  picks: Record<string, string>;
-  thickness: Record<string, string>;
-  pkg: string;
+export interface MainCutAnswer {
+  mode: CutMode;
+  roastSize?: string;    // "3 lb"
+  thickness?: string;    // '1 1/4'
+  perPackage?: string;   // "2"
+}
+
+export interface CutSheetAnswers {
+  main: Record<string, MainCutAnswer>;           // chuck, arm, sirloin, sirlointip, topround, btmround
+  rib: { choice: "prime" | "ribsteak" | "ribeye"; thickness?: string; perPackage?: string };
+  loin: { choice: "tbone" | "strip"; thickness: string; perPackage: string };
+  filetThickness?: string;                        // when loin.choice === "strip"
+  extras: Record<string, "yes" | "grind">;        // brisket, flank, …
+  groundPack: string;                             // "1" | "1.5" | "2"
   patties: boolean;
   pattySize: string;
   organs: string[];
   notes: string;
+}
+
+export function defaultCutSheet(): CutSheetAnswers {
+  return {
+    main: Object.fromEntries(
+      MAIN_CUTS.map((c) => [c.id, {
+        mode: c.defMode,
+        roastSize: "3 lb",
+        thickness: "1",
+        perPackage: "2",
+      } satisfies MainCutAnswer]),
+    ),
+    rib: { choice: "ribeye", thickness: "1", perPackage: "2" },
+    loin: { choice: "tbone", thickness: "1", perPackage: "2" },
+    filetThickness: "1 1/2",
+    extras: Object.fromEntries(
+      EXTRA_GROUPS.flatMap((g) => g.cuts.map((c) => [c.id, c.def])),
+    ),
+    groundPack: "1.5",
+    patties: false,
+    pattySize: "5oz",
+    organs: [],
+    notes: "",
+  };
+}
+
+/* ---------------- orders ---------------- */
+
+export type OrderStatus =
+  | "reserved"      // deposit in, share held
+  | "locked"        // past Sept 30 deadline, cut sheet sent to butcher
+  | "processing"    // harvested, hanging at Colorado Custom
+  | "ready"         // packaged, ready for pickup
+  | "picked-up";
+
+export interface Order {
+  code: string;            // e.g. TR-4F7K2M
+  createdAt: string;
+  status: OrderStatus;
+  share: ShareId;
+  cutSheet: CutSheetAnswers;
   name: string;
   email: string;
   phone: string;
-  groupCode?: string;      // set when this order joined a split-a-cow group
+  address: string;         // CCMC cut sheet wants it
   sample?: boolean;
 }
 
-export interface GroupMember {
-  name: string;
-  share: ShareId;
-  orderCode: string;
-  joinedAt: string;
-}
-
-export interface Group {
-  code: string;            // e.g. HENDERSON or 6-char
-  name: string;            // display name, e.g. "The Hendersons' cow"
-  dateId: string;
-  createdAt: string;
-  createdBy: string;
-  members: GroupMember[];
-  sample?: boolean;
-}
-
-const ORDERS_KEY = "cr.orders.v1";
-const GROUPS_KEY = "cr.groups.v1";
-
-/* ---------------- persistence ---------------- */
+const ORDERS_KEY = "tr.orders.v2";
+const NOTES_KEY = "tr.notes.v2";
 
 function load<T>(key: string): T[] {
   try {
@@ -70,9 +91,7 @@ function save<T>(key: string, rows: T[]) {
   localStorage.setItem(key, JSON.stringify(rows));
 }
 
-/* ---------------- ids ---------------- */
-
-const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O/1/I/L
+const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
 export function randomCode(len = 6): string {
   let out = "";
@@ -80,62 +99,19 @@ export function randomCode(len = 6): string {
   return out;
 }
 
-/* ---------------- seed data ----------------
-   One sample group + orders so the split-a-cow and tracking
-   pages demonstrate themselves on first visit.               */
-
+/* One sample order so tracking + back office demo themselves. */
 function seed() {
-  if (localStorage.getItem(GROUPS_KEY)) return;
-
-  const sampleOrders: Order[] = [
-    {
-      code: "CR-SAMPLE1", createdAt: "2026-08-02T17:00:00Z", status: "reserved",
-      share: "quarter", dateId: "oct",
-      picks: Object.fromEntries(DECISIONS.map((d) => [d.id, d.def])),
-      thickness: { rib: "1.5", loin: "1.5", sirloin: "1" },
-      pkg: "1.5", patties: false, pattySize: "5oz", organs: [],
-      notes: "", name: "Dana Henderson", email: "dana@example.com", phone: "",
-      groupCode: "HNDRSN", sample: true,
-    },
-    {
-      code: "CR-SAMPLE2", createdAt: "2026-08-05T21:30:00Z", status: "reserved",
-      share: "quarter", dateId: "oct",
-      picks: Object.fromEntries(DECISIONS.map((d) => [d.id, d.def])),
-      thickness: { rib: "1", loin: "1", sirloin: "1" },
-      pkg: "1", patties: true, pattySize: "5oz", organs: ["bones"],
-      notes: "", name: "Marcus Lee", email: "marcus@example.com", phone: "",
-      groupCode: "HNDRSN", sample: true,
-    },
-    {
-      code: "CR-SAMPLE3", createdAt: "2026-08-11T15:10:00Z", status: "reserved",
-      share: "quarter", dateId: "oct",
-      picks: Object.fromEntries(DECISIONS.map((d) => [d.id, d.def])),
-      thickness: { rib: "1.5", loin: "1.5", sirloin: "1" },
-      pkg: "2", patties: false, pattySize: "5oz", organs: ["oxtail", "tallow"],
-      notes: "", name: "Priya Shah", email: "priya@example.com", phone: "",
-      groupCode: "HNDRSN", sample: true,
-    },
-  ];
-
-  const sampleGroup: Group = {
-    code: "HNDRSN",
-    name: "The Henderson Block Cow",
-    dateId: "oct",
-    createdAt: "2026-08-02T17:00:00Z",
-    createdBy: "Dana Henderson",
-    members: sampleOrders.map((o) => ({
-      name: o.name, share: o.share, orderCode: o.code, joinedAt: o.createdAt,
-    })),
-    sample: true,
+  if (localStorage.getItem(ORDERS_KEY)) return;
+  const sample: Order = {
+    code: "TR-SAMPLE1", createdAt: "2026-09-02T17:00:00Z", status: "reserved",
+    share: "half", cutSheet: defaultCutSheet(),
+    name: "Dana Henderson", email: "dana@example.com", phone: "970-555-0134",
+    address: "418 Maple St, Greeley CO", sample: true,
   };
-
-  save(ORDERS_KEY, sampleOrders);
-  save(GROUPS_KEY, [sampleGroup]);
+  save(ORDERS_KEY, [sample]);
 }
 
 seed();
-
-/* ---------------- orders ---------------- */
 
 export function listOrders(): Order[] {
   return load<Order>(ORDERS_KEY);
@@ -148,24 +124,13 @@ export function getOrder(code: string): Order | undefined {
 export function createOrder(input: Omit<Order, "code" | "createdAt" | "status">): Order {
   const order: Order = {
     ...input,
-    code: "CR-" + randomCode(6),
+    code: "TR-" + randomCode(6),
     createdAt: new Date().toISOString(),
     status: "reserved",
   };
   const rows = listOrders();
   rows.push(order);
   save(ORDERS_KEY, rows);
-
-  if (order.groupCode) {
-    const g = getGroup(order.groupCode);
-    if (g) {
-      g.members.push({
-        name: order.name, share: order.share,
-        orderCode: order.code, joinedAt: order.createdAt,
-      });
-      upsertGroup(g);
-    }
-  }
   return order;
 }
 
@@ -178,8 +143,6 @@ export function updateOrderStatus(code: string, status: OrderStatus) {
 }
 
 /* ---------------- customer notes (admin) ---------------- */
-
-const NOTES_KEY = "cr.notes.v1";
 
 export function getNotes(): Record<string, string> {
   try {
@@ -196,61 +159,16 @@ export function setNote(email: string, text: string) {
   localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
 }
 
-/* ---------------- groups ---------------- */
-
-export function listGroups(): Group[] {
-  return load<Group>(GROUPS_KEY);
-}
-
-export function getGroup(code: string): Group | undefined {
-  return listGroups().find((g) => g.code.toUpperCase() === code.toUpperCase());
-}
-
-export function createGroup(name: string, dateId: string, createdBy: string): Group {
-  const g: Group = {
-    code: randomCode(6),
-    name, dateId, createdBy,
-    createdAt: new Date().toISOString(),
-    members: [],
-  };
-  const rows = listGroups();
-  rows.push(g);
-  save(GROUPS_KEY, rows);
-  return g;
-}
-
-function upsertGroup(g: Group) {
-  const rows = listGroups();
-  const i = rows.findIndex((x) => x.code === g.code);
-  if (i >= 0) rows[i] = g;
-  else rows.push(g);
-  save(GROUPS_KEY, rows);
-}
-
-/** Quarter-slots filled out of 4. */
-export function groupFill(g: Group): number {
-  return g.members.reduce((sum, m) => sum + SHARES[m.share].quarters, 0);
-}
-
-export function groupComplete(g: Group): boolean {
-  return groupFill(g) >= 4;
-}
-
 /* ---------------- status timeline ---------------- */
 
 export const STATUS_STEPS: { id: OrderStatus; label: string; blurb: string }[] = [
-  { id: "reserved", label: "Reserved", blurb: "Deposit paid. Your share is held — you can cancel for a full refund until the order deadline." },
-  { id: "locked", label: "Order locked", blurb: "Deadline passed. Your animal is committed to the butcher." },
-  { id: "processing", label: "At the butcher", blurb: "Your animal was delivered to Colorado Custom in Kersey." },
-  { id: "aging", label: "Dry aging", blurb: "About two weeks. This is where the flavor comes from." },
-  { id: "ready", label: "Ready for pickup", blurb: "Colorado Custom will call you to set a time. Bring coolers." },
-  { id: "picked-up", label: "Picked up", blurb: "Enjoy. Tell us how the brisket went." },
+  { id: "reserved", label: "Reserved", blurb: "Deposit in. Your share is held, and your cut sheet can still be changed until Sept 30." },
+  { id: "locked", label: "Cut sheet locked", blurb: "Sept 30 has passed — your cutting instructions are with Colorado Custom." },
+  { id: "processing", label: "Hanging & processing", blurb: "Your beef is dry aging 14 days, then cut and packaged to your instructions." },
+  { id: "ready", label: "Ready for pickup", blurb: "Pick up at Colorado Custom in Kersey the week of Oct 1. Bring coolers." },
+  { id: "picked-up", label: "Picked up", blurb: "Enjoy. Tell us how the first ribeye went." },
 ];
 
 export function statusIndex(s: OrderStatus): number {
   return STATUS_STEPS.findIndex((x) => x.id === s);
-}
-
-export function harvestFor(dateId: string) {
-  return DATES.find((d) => d.id === dateId);
 }

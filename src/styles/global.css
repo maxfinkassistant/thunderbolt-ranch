@@ -708,16 +708,16 @@ h3.d { font-size: 1.4rem; }
 }
 
 .sm-region {
-  fill: oklch(46% 0.115 35 / 0.16);
-  stroke: oklch(98% 0.01 90 / 0.85);
+  fill: oklch(64% 0.095 85 / 0.14);
+  stroke: oklch(90% 0.05 88 / 0.85);
   stroke-width: 1.5;
   stroke-linejoin: round;
-  mix-blend-mode: multiply;
+  mix-blend-mode: screen;
   transition: fill 0.18s ease;
 }
 .sm-region.click { cursor: pointer; }
-.sm-region.click:hover { fill: oklch(46% 0.115 35 / 0.38); }
-.sm-region.on { fill: oklch(46% 0.115 35 / 0.58); }
+.sm-region.click:hover { fill: oklch(64% 0.095 85 / 0.34); }
+.sm-region.on { fill: oklch(64% 0.095 85 / 0.5); }
 
 .sm-label {
   font-family: var(--font-mono);
@@ -794,6 +794,51 @@ h3.d { font-size: 1.4rem; }
   color: var(--rust);
 }
 .count-val { color: var(--ink-2); }
+
+/* ---------------- cut sheet wizard ---------------- */
+
+.wizard-top { margin-bottom: var(--space-lg); }
+.wizard-bar {
+  margin-top: var(--space-xs);
+  height: 6px;
+  background: var(--paper-2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.wizard-bar > div {
+  height: 100%;
+  background: var(--rust);
+  border-radius: 3px;
+  transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.wizard-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+/* header logo */
+.brand-logo { height: 46px; width: auto; display: block; }
+
+/* pasture-to-freezer weights */
+.weights { display: grid; gap: var(--space-sm); max-width: 560px; }
+.weight-row { display: grid; grid-template-columns: 150px 1fr; gap: var(--space-md); align-items: center; }
+.weight-label .tag { display: block; }
+.weight-label .sub { font-size: 11px; color: var(--mute); }
+.weight-bar {
+  background: var(--dark);
+  color: var(--on-dark);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  text-align: center;
+}
+.weight-bar.b2 { background: oklch(45% 0.07 85); width: 72%; }
+.weight-bar.b3 { background: var(--brass); color: var(--dark); width: 52%; }
 
 /* ---------------- back office ---------------- */
 

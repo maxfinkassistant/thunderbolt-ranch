@@ -5,8 +5,6 @@ import Layout from "./components/Layout";
 import Landing from "./pages/Landing";
 import HowItWorks from "./pages/HowItWorks";
 import Order from "./pages/Order";
-import Split from "./pages/Split";
-import GroupPage from "./pages/Group";
 import Track from "./pages/Track";
 import Customers from "./pages/Customers";
 import CustomerTicket from "./pages/CustomerTicket";
@@ -28,8 +26,6 @@ const routes = [
       { path: "/", element: <Landing /> },
       { path: "/how-it-works", element: <HowItWorks /> },
       { path: "/order", element: <Order /> },
-      { path: "/split", element: <Split /> },
-      { path: "/split/:code", element: <GroupPage /> },
       { path: "/track", element: <Track /> },
       { path: "/track/:code", element: <Track /> },
       { path: "/customers", element: <Customers /> },

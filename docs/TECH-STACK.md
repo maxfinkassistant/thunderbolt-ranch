@@ -79,13 +79,13 @@ create table orders (
 4. **Week 3–4:** Admin view — a simple protected route (or even Airtable synced from Supabase) listing orders per harvest for you and a printable cut ticket per order for Colorado Custom.
 5. **Season 2:** Twilio nudges (3/4-full groups, deadlines, pickup), review-ask automation, inventory counter driven from the DB instead of config.
 
-## Placeholders to confirm before real money moves
+## Confirmed pricing (from the Thunderbolt one-pager, Sept 2026)
 
-All marked in `src/data/config.ts`:
-- Deposit amounts ($200/$400/$600) and whether they're per-share or per-quarter
-- $/lb hanging rates (currently $5.25 / $4.95 / $4.65 tiering) and the processing rate ($1.05/lb)
-- Free storage days at Colorado Custom (site currently says 7) and the $10/day figure
-- Delivery radius for the $100 local delivery
-- Refund policy language (site says: full refund until order deadline, then credit)
-- Harvest dates/capacity for the real season
-- Swap Unsplash photography for the ranch's own photos before launch (`IMAGES` in config + per-cut `photo` fields)
+Now live in `src/data/config.ts`:
+- $6.00/lb hanging weight, all share sizes; ≈$8.57/lb take-home estimate
+- $250 deposit across the board; balance to Thunderbolt Ranch LLC at pickup; no processing fees
+- Quarter $1,350 / Half $2,700 / Whole $5,400 on typical weights (225/450/900 lb hanging)
+- October 2026 harvest only: kill Sept 16, 14-day hang, pickup week of Oct 1; order by Sept 30
+- Pickup only at Colorado Custom, Kersey ($10/day storage after the grace week)
+
+Still to swap before launch: ranch photography (`IMAGES` in config + per-cut photos + the steer map base photo).
