@@ -31,11 +31,14 @@ Realistically 3–4 weeks to launch once pricing is confirmed.*
 - [ ] Twilio: "group at 3/4, one quarter left" + pickup-day SMS
 - [ ] Group lifecycle: member joined, cow completed
 
-## 5. CRM — Airtable (week 3)
-- [ ] Customers table synced from Supabase: contact, share, harvest, group, deposit/balance status, LTV
-- [ ] Views: current harvest roster; groups at 3/4 (call list); past customers by season
+## 5. CRM — built into the site at /customers (DONE in demo; harden for launch)
+- [x] Harvest roster with per-order status control (drives customer tracking pages)
+- [x] Groups board with 3/4-full call list flags
+- [x] Customer rollup with notes + CSV export
+- [x] Printable butcher ticket per order
+- [ ] Replace the placeholder passcode gate with real auth (Supabase) at launch
 - [ ] Source tagging on every order (group link / direct / market) for attribution
-- [ ] +14 days post-pickup automation: review ask + next-season group CTA
+- [ ] +14 days post-pickup automation: review ask + next-season group CTA (via Resend)
 
 ## 6. SEO (week 3–4, ongoing)
 - [ ] Per-route titles/meta, OG images, sitemap.xml, robots.txt; pre-render or SSG the landing + how-it-works routes
