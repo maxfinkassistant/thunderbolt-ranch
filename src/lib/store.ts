@@ -169,6 +169,33 @@ export function createOrder(input: Omit<Order, "code" | "createdAt" | "status">)
   return order;
 }
 
+export function updateOrderStatus(code: string, status: OrderStatus) {
+  const rows = listOrders();
+  const i = rows.findIndex((o) => o.code === code);
+  if (i < 0) return;
+  rows[i] = { ...rows[i], status };
+  save(ORDERS_KEY, rows);
+}
+
+/* ---------------- customer notes (admin) ---------------- */
+
+const NOTES_KEY = "cr.notes.v1";
+
+export function getNotes(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(NOTES_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+export function setNote(email: string, text: string) {
+  const notes = getNotes();
+  if (text.trim()) notes[email] = text;
+  else delete notes[email];
+  localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+}
+
 /* ---------------- groups ---------------- */
 
 export function listGroups(): Group[] {

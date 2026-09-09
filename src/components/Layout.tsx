@@ -26,6 +26,7 @@ export default function Layout() {
         <div>THUNDERBOLT RANCH · BEEF QUESTIONS {RANCH_PHONE}</div>
         <div>PICKUP &amp; PROCESSING: {PROCESSOR.name.toUpperCase()} {PROCESSOR.phone}</div>
         <div>{PROCESSOR.address.toUpperCase()}</div>
+        <div><Link to="/customers">RANCH OFFICE</Link></div>
       </footer>
     </>
   );

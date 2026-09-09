@@ -326,6 +326,9 @@ export const STORE_COMPARE = [
   { cut: "Ground beef", store: 5.99 },
 ];
 
+/** Back-office gate. PLACEHOLDER — replace with real auth (Supabase) at launch. */
+export const ADMIN_PASSCODE = "KERSEY";
+
 export const RANCH_PHONE = "970-645-1339";
 export const PROCESSOR = {
   name: "Colorado Custom Meat Co",
