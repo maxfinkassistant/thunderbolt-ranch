@@ -54,6 +54,6 @@ The site appends `client_reference_id=<order code>` and the customer's email to 
 
 ## Later (not today)
 
-- Custom domain (thunderboltranch.com → GitHub Pages; set `VITE_BASE=/` in the workflow)
+- thunderbolt-ranch.com forwards to thunderboltbeef.com (Squarespace → Domain forwarding)
 - Stripe webhook to auto-mark deposits paid on the sheet (today: glance at Stripe, then set status in Ranch Office)
 - Move off Apps Script to Supabase + Resend if volume ever warrants it — the client code is already shaped for it
