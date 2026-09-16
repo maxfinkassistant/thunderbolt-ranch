@@ -46,7 +46,7 @@ The site appends `client_reference_id=<order code>` and the customer's email to 
 
 | Thing | Where |
 |---|---|
-| Live site | https://maxfinkassistant.github.io/thunderbolt-ranch/ |
+| Live site | https://thunderboltbeef.com/ |
 | Orders / CRM | Google Sheet "Thunderbolt Ranch — Orders" in your Drive |
 | Ranch Office | site footer → Ranch Office, passcode = your `ADMIN_KEY` |
 | Cut sheet PDFs | Ranch Office → "CCMC PDF" on any order → email to order@ccmeatco.com |
