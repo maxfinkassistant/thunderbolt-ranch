@@ -71,6 +71,10 @@ function orderFromRow_(r) {
 /* ---------------- GET ---------------- */
 
 function doGet(e) {
+  try { return doGet_(e); } catch (err) { return json_({ ok: false, error: String(err && err.message || err) }); }
+}
+
+function doGet_(e) {
   const q = (e && e.parameter) || {};
   if (q.action === "order" && q.code) {
     const code = String(q.code).toUpperCase();
@@ -87,6 +91,10 @@ function doGet(e) {
 /* ---------------- POST ---------------- */
 
 function doPost(e) {
+  try { return doPost_(e); } catch (err) { return json_({ ok: false, error: String(err && err.message || err) }); }
+}
+
+function doPost_(e) {
   let body;
   try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: "bad json" }); }
 
@@ -103,6 +111,7 @@ function doPost(e) {
   if (body.action === "order") {
     const o = body.order;
     if (!o || !o.code || !o.email) return json_({ ok: false, error: "missing order" });
+    o.email = String(o.email).trim();
     const summary = (body.summary || []).map(l => l.name + ": " + l.detail).join("\n");
     const cost = body.cost || {};
     sheet_().appendRow([
@@ -111,9 +120,10 @@ function doPost(e) {
       o.share, cost.total, cost.deposit, cost.balance,
       summary, (o.cutSheet && o.cutSheet.notes) || "", JSON.stringify(o),
     ]);
-    notifyRanch_(o, summary, cost);
-    confirmCustomer_(o, summary, cost, body.depositLink);
-    return json_({ ok: true, code: o.code });
+    const emailErrors = [];
+    try { notifyRanch_(o, summary, cost); } catch (err) { emailErrors.push("ranch: " + (err && err.message || err)); }
+    try { confirmCustomer_(o, summary, cost, body.depositLink); } catch (err) { emailErrors.push("customer: " + (err && err.message || err)); }
+    return json_({ ok: true, code: o.code, emailErrors: emailErrors });
   }
 
   return json_({ ok: false, error: "unknown action" });
