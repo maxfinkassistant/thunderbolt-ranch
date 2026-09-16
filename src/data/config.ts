@@ -73,7 +73,7 @@ export const PROCESSOR = {
   cutSheetEmail: "order@ccmeatco.com",
 };
 
-export const RANCH_CONTACT = { name: "Josh", phone: "402-245-8195" };
+export const RANCH_CONTACT = { name: "Josh", phone: "402-245-8195", email: "thunderboltbeef@gmail.com" };
 export const PAYABLE_TO = "Thunderbolt Ranch LLC";
 
 /* ---------------- brand copy (substantiated only) ----------------

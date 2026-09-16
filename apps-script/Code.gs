@@ -170,7 +170,7 @@ function confirmCustomer_(o, summary, cost, depositLink) {
     "YOUR CUT SHEET",
     summary,
     "",
-    "Questions? Call or text Josh — 402-245-8195.",
+    "Questions? Call or text Josh — 402-245-8195, or reply to this email.",
     "",
     "— Thunderbolt Ranch · Ranch to Table",
   ].join("\n");

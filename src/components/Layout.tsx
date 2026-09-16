@@ -25,7 +25,7 @@ export default function Layout() {
       <Outlet />
 
       <footer className="site-footer">
-        <div>THUNDERBOLT RANCH · CALL OR TEXT {RANCH_CONTACT.name.toUpperCase()} {RANCH_CONTACT.phone}</div>
+        <div>THUNDERBOLT RANCH · CALL OR TEXT {RANCH_CONTACT.name.toUpperCase()} {RANCH_CONTACT.phone} · {RANCH_CONTACT.email.toUpperCase()}</div>
         <div>PICKUP: {PROCESSOR.name.toUpperCase()} · {PROCESSOR.address.toUpperCase()}</div>
         <div>CHECKS PAYABLE TO {PAYABLE_TO.toUpperCase()}</div>
         <div><Link to="/customers">RANCH OFFICE</Link></div>
