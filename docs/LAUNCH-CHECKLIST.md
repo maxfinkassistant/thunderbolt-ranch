@@ -19,6 +19,7 @@ not a month-long build. Ship the minimum that takes real deposits.*
 - [x] Ranch Office key validated server-side (no passcode in client code once the backend is on)
 - [x] Apps Script backend deployed from thunderboltbeef@gmail.com; live on the site (test order TR-TESTITZ round-tripped: sheet row + customer email confirmed)
 - [x] Stripe Payment Link created (buy.stripe.com/00w7sM9M25iIgpx0kQ1kA00) and wired into the site
+- [x] Real phone test (Sept 16) through the live site: wizard → reserve → confirmation → deposit link. Script v2 returns JSON errors and tolerates mail failures.
 - [x] Stripe account verified, link active; real $250 test deposit (TR-PAYLNJ) landed in Stripe with the order code as Client reference ID — money path proven end to end
 - [ ] Remove the TR-SAMPLE1 seed order once real orders flow (it's local-only demo data; harmless on the sheet)
 - [ ] Butcher sanity-check of the wizard's per-cut count estimates (`src/data/config.ts` yields)
