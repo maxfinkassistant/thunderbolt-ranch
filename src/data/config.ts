@@ -382,8 +382,20 @@ export const PRIMALS: Primal[] = [
   },
 ];
 
-/** Back-office gate. PLACEHOLDER — replace with real auth at launch. */
-export const ADMIN_PASSCODE = "KERSEY";
+/* ---------------- launch wiring ----------------
+   BACKEND_URL: the deployed Google Apps Script web-app URL
+   (apps-script/Code.gs). Orders POST here → Google Sheet CRM +
+   notification emails. Empty = local demo mode (browser only).
+
+   STRIPE_PAYMENT_LINK: a Stripe Payment Link for the $250 deposit.
+   The order code is passed as client_reference_id so payments
+   reconcile against the sheet. Empty = "pay Josh directly" copy.  */
+
+export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "";
+export const STRIPE_PAYMENT_LINK = import.meta.env.VITE_STRIPE_PAYMENT_LINK ?? "";
+
+/** Base path for static assets (GitHub Pages serves under /repo/). */
+export const ASSET = (p: string) => `${import.meta.env.BASE_URL}${p.replace(/^\//, "")}`;
 
 export const money = (n: number) =>
   "$" + n.toLocaleString(undefined, { maximumFractionDigits: 0 });

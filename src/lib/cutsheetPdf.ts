@@ -3,7 +3,7 @@
    form's AcroForm dictionary. Runs entirely in the browser. */
 
 import { PDFDocument } from "pdf-lib";
-import { SHARES, HARVEST } from "../data/config";
+import { SHARES, HARVEST, ASSET } from "../data/config";
 import type { Order } from "./store";
 
 const X = "X";
@@ -35,7 +35,7 @@ function fillYesGrind(form: ReturnType<PDFDocument["getForm"]>, suffix: string, 
 }
 
 export async function buildFilledCutSheet(order: Order): Promise<Uint8Array> {
-  const bytes = await fetch("/ccmc-cut-sheet.pdf").then((r) => r.arrayBuffer());
+  const bytes = await fetch(ASSET("ccmc-cut-sheet.pdf")).then((r) => r.arrayBuffer());
   return fillCutSheet(order, bytes);
 }
 

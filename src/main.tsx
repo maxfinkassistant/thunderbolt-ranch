@@ -34,10 +34,10 @@ const routes = [
   },
 ];
 
-// Hash routing when opened directly as a file (single-file demo build);
-// clean URLs when served normally.
+// Hash routing in production (GitHub Pages has no SPA fallback) and when
+// opened as a file; clean URLs on the dev server.
 const router =
-  window.location.protocol === "file:"
+  import.meta.env.PROD || window.location.protocol === "file:"
     ? createHashRouter(routes)
     : createBrowserRouter(routes);
 

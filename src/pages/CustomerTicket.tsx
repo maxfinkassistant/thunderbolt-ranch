@@ -1,17 +1,23 @@
 /* Printable ticket for one order, plus the filled CCMC PDF
    download. Print hides the site chrome. */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { SHARES, HARVEST, DEPOSIT, PAYABLE_TO, RANCH_CONTACT, money } from "../data/config";
-import { getOrder } from "../lib/store";
+import { getOrder, type Order } from "../lib/store";
 import { boxSummary } from "../lib/estimate";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
+import { backendConfigured, fetchOrder } from "../lib/api";
 
 export default function CustomerTicket() {
   const { code = "" } = useParams();
-  const order = getOrder(code);
+  const [order, setOrder] = useState<Order | undefined>(() => getOrder(code));
   const [pdfBusy, setPdfBusy] = useState(false);
+
+  useEffect(() => {
+    if (!backendConfigured() || order) return;
+    fetchOrder(code).then((o) => { if (o) setOrder(o); }).catch(() => {});
+  }, [code, order]);
 
   if (!order) {
     return (

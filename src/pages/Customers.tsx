@@ -2,18 +2,23 @@
    orders store the storefront writes. Passcode gate is a
    placeholder until real auth lands. */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { SHARES, HARVEST, ADMIN_PASSCODE, DEPOSIT, money } from "../data/config";
+import { SHARES, HARVEST, DEPOSIT, money } from "../data/config";
 import {
   listOrders, updateOrderStatus, getNotes, setNote, STATUS_STEPS,
   type Order, type OrderStatus,
 } from "../lib/store";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
+import { backendConfigured, checkAdminKey, fetchOrders, pushStatus } from "../lib/api";
 
 type Tab = "roster" | "customers";
 
 const AUTH_KEY = "tr.admin.v1";
+const KEY_KEY = "tr.admin.key";
+/* Local demo mode only (no backend). With a backend, the key is
+   validated server-side and never lives in this code. */
+const DEMO_PASSCODE = "KERSEY";
 
 function exportCsv(orders: Order[]) {
   const head = ["code", "status", "name", "email", "phone", "address", "share", "harvest", "est_takehome_lbs", "total", "deposit", "balance", "created"];
@@ -38,12 +43,52 @@ export default function Customers() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem(AUTH_KEY) === "1");
   const [code, setCode] = useState("");
   const [bad, setBad] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [tab, setTab] = useState<Tab>("roster");
   const [tick, setTick] = useState(0);
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
+  const [remote, setRemote] = useState<Order[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const orders = useMemo(() => listOrders(), [tick]);
+  const adminKey = sessionStorage.getItem(KEY_KEY) ?? "";
+  const local = useMemo(() => listOrders(), [tick]);
+  const orders = remote ?? local;
   const notes = useMemo(() => getNotes(), [tick]);
+
+  /* pull the roster from the ranch's order system */
+  useEffect(() => {
+    if (!authed || !backendConfigured()) return;
+    let alive = true;
+    fetchOrders(adminKey)
+      .then((rows) => { if (alive) { setRemote(rows); setLoadError(null); } })
+      .catch((e) => { if (alive) setLoadError((e as Error).message); });
+    return () => { alive = false; };
+  }, [authed, adminKey, tick]);
+
+  const changeStatus = async (o: Order, status: OrderStatus) => {
+    updateOrderStatus(o.code, status);
+    if (backendConfigured()) {
+      try { await pushStatus(adminKey, o.code, status); } catch (e) { setLoadError((e as Error).message); }
+    }
+    setTick((x) => x + 1);
+  };
+
+  const unlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const key = code.trim();
+    if (backendConfigured()) {
+      setChecking(true);
+      const ok = await checkAdminKey(key);
+      setChecking(false);
+      if (!ok) { setBad(true); return; }
+      sessionStorage.setItem(KEY_KEY, key);
+    } else if (key.toUpperCase() !== DEMO_PASSCODE) {
+      setBad(true);
+      return;
+    }
+    sessionStorage.setItem(AUTH_KEY, "1");
+    setAuthed(true);
+  };
 
   if (!authed) {
     return (
@@ -53,20 +98,16 @@ export default function Customers() {
         <form
           className="decision"
           style={{ display: "grid", gap: "var(--space-sm)", marginTop: "var(--space-lg)", textAlign: "left" }}
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (code.trim().toUpperCase() === ADMIN_PASSCODE) {
-              sessionStorage.setItem(AUTH_KEY, "1");
-              setAuthed(true);
-            } else setBad(true);
-          }}
+          onSubmit={unlock}
         >
           <div className="field">
             <label htmlFor="pc">Passcode</label>
             <input id="pc" type="password" value={code} onChange={(e) => { setCode(e.target.value); setBad(false); }} autoFocus />
           </div>
           {bad && <p className="small" style={{ color: "var(--rust)" }}>That's not it. Ask Max or Josh.</p>}
-          <button className="btn btn-solid btn-wide" type="submit">Open the books</button>
+          <button className="btn btn-solid btn-wide" type="submit" disabled={checking}>
+            {checking ? "Checking…" : "Open the books"}
+          </button>
         </form>
       </main>
     );
@@ -99,11 +140,15 @@ export default function Customers() {
           <p className="small mute" style={{ marginTop: 4 }}>
             {orders.length} orders · ~{totals.hanging.toLocaleString()} lb hanging committed ·
             {" "}{money(totals.revenue)} booked ({money(totals.deposits)} in deposits)
+            {backendConfigured() && !remote && !loadError && " · loading from the order sheet…"}
+            {!backendConfigured() && " · local demo mode"}
           </p>
+          {loadError && <p className="small" style={{ color: "var(--rust)" }}>Order system: {loadError}</p>}
         </div>
         <div className="admin-actions">
+          <button className="btn btn-ghost" onClick={() => setTick((x) => x + 1)}>Refresh</button>
           <button className="btn btn-ghost" onClick={() => exportCsv(orders)}>Export CSV</button>
-          <button className="btn btn-ghost" onClick={() => { sessionStorage.removeItem(AUTH_KEY); setAuthed(false); }}>
+          <button className="btn btn-ghost" onClick={() => { sessionStorage.removeItem(AUTH_KEY); sessionStorage.removeItem(KEY_KEY); setAuthed(false); }}>
             Lock up
           </button>
         </div>
@@ -139,7 +184,7 @@ export default function Customers() {
                     <select
                       className="admin-select"
                       value={o.status}
-                      onChange={(e) => { updateOrderStatus(o.code, e.target.value as OrderStatus); setTick((x) => x + 1); }}
+                      onChange={(e) => changeStatus(o, e.target.value as OrderStatus)}
                       aria-label={`Status for ${o.code}`}
                     >
                       {STATUS_STEPS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}

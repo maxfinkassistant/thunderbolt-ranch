@@ -1,20 +1,44 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { SHARES, HARVEST } from "../data/config";
-import { getOrder, listOrders, STATUS_STEPS, statusIndex } from "../lib/store";
+import { getOrder, listOrders, STATUS_STEPS, statusIndex, type Order } from "../lib/store";
 import { boxSummary } from "../lib/estimate";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
+import { backendConfigured, fetchOrder } from "../lib/api";
 
 export default function Track() {
   const { code } = useParams();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [pdfBusy, setPdfBusy] = useState(false);
-  const order = code ? getOrder(code) : undefined;
+  const [order, setOrder] = useState<Order | undefined>(() => (code ? getOrder(code) : undefined));
+  const [loading, setLoading] = useState(false);
   const mine = listOrders();
+
+  /* local cache first; then the ranch's order system if configured */
+  useEffect(() => {
+    if (!code) return;
+    const local = getOrder(code);
+    setOrder(local);
+    if (!backendConfigured()) return;
+    let alive = true;
+    setLoading(true);
+    fetchOrder(code)
+      .then((remote) => { if (alive && remote) setOrder(remote); })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [code]);
 
   /* ---------- lookup ---------- */
   if (!code || !order) {
+    if (code && loading) {
+      return (
+        <main className="page order-main" style={{ maxWidth: 760 }}>
+          <p className="mute">Looking up {code.toUpperCase()}…</p>
+        </main>
+      );
+    }
     return (
       <main className="page order-main" style={{ maxWidth: 760 }}>
         <div className="section-head">

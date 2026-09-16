@@ -1,5 +1,5 @@
 import { NavLink, Link, Outlet } from "react-router-dom";
-import { RANCH_CONTACT, PROCESSOR, PAYABLE_TO } from "../data/config";
+import { RANCH_CONTACT, PROCESSOR, PAYABLE_TO, ASSET } from "../data/config";
 
 export default function Layout() {
   return (
@@ -9,7 +9,7 @@ export default function Layout() {
       </div>
       <header className="site-header">
         <Link to="/" className="brand" aria-label="Thunderbolt Ranch home" style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <img className="brand-logo" src="/thunderbolt-mark.png" alt="" />
+          <img className="brand-logo" src={ASSET("thunderbolt-mark.png")} alt="" />
           <span>
             <span className="brand-name" style={{ display: "block" }}>Thunderbolt Ranch</span>
             <span className="brand-sub" style={{ display: "block" }}>RANCH TO TABLE · COLORADO</span>

@@ -5,7 +5,9 @@
    (DPLA / Wikimedia Commons), warm-toned to the brand palette.
    Lives in /public — swap for a ranch photo when available.    */
 
-export const STEER_PHOTO = "/angus-steer.jpg";
+import { ASSET } from "../data/config";
+
+export const STEER_PHOTO = ASSET("angus-steer.jpg");
 
 /* Coordinates in the photo's 864 × 609 pixel space. */
 export const VIEW = { w: 864, h: 609 };

@@ -12,6 +12,15 @@ import {
 import { defaultCutSheet, createOrder, type Order as OrderRow, type CutSheetAnswers } from "../lib/store";
 import { boxSummary, groundEstimate, shareCost } from "../lib/estimate";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
+import { backendConfigured, submitOrder } from "../lib/api";
+import { STRIPE_PAYMENT_LINK } from "../data/config";
+
+/** Stripe Payment Link with the order code attached for reconciliation. */
+function depositUrl(code: string, email: string): string {
+  if (!STRIPE_PAYMENT_LINK) return "";
+  const sep = STRIPE_PAYMENT_LINK.includes("?") ? "&" : "?";
+  return `${STRIPE_PAYMENT_LINK}${sep}client_reference_id=${encodeURIComponent(code)}&prefilled_email=${encodeURIComponent(email)}`;
+}
 
 const inches = (id?: string) => THICKNESS_OPTIONS.find((t) => t.id === id)?.inches ?? 1;
 const fmtRange = ([lo, hi]: [number, number]) => (lo === hi ? `${lo}` : `${lo}–${hi}`);
@@ -31,6 +40,8 @@ export default function Order() {
   const [who, setWho] = useState({ name: "", email: "", phone: "", address: "" });
   const [placed, setPlaced] = useState<OrderRow | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [placing, setPlacing] = useState(false);
+  const [placeError, setPlaceError] = useState<string | null>(null);
 
   const frac = share ? SHARES[share].frac : 0.5;
   const ground = useMemo(() => (share ? groundEstimate(a, share) : [0, 0] as [number, number]), [a, share]);
@@ -38,8 +49,29 @@ export default function Order() {
   const next = () => { setQ((x) => x + 1); window.scrollTo({ top: 0 }); };
   const back = () => { setQ((x) => x - 1); window.scrollTo({ top: 0 }); };
 
-  const place = () => {
+  const place = async () => {
+    setPlacing(true);
+    setPlaceError(null);
     const order = createOrder({ share: share!, cutSheet: a, ...who });
+    if (backendConfigured()) {
+      try {
+        const cost = shareCost(share!);
+        await submitOrder({
+          order,
+          summary: boxSummary(a, share!),
+          cost: { total: cost.total, deposit: cost.deposit, balance: cost.balance },
+          depositLink: depositUrl(order.code, order.email),
+        });
+      } catch (err) {
+        setPlacing(false);
+        setPlaceError(
+          `We couldn't reach the ranch's order system (${(err as Error).message}). ` +
+          `Your order isn't lost — text Josh at ${RANCH_CONTACT.phone} with code ${order.code}, or try again.`,
+        );
+        return;
+      }
+    }
+    setPlacing(false);
     setPlaced(order);
     window.scrollTo({ top: 0 });
   };
@@ -51,8 +83,33 @@ export default function Order() {
         <div className="tag" style={{ color: "var(--rust)", marginBottom: "var(--space-md)" }}>Reserved</div>
         <h2 className="d" style={{ fontSize: "clamp(2.2rem,5vw,3.2rem)" }}>Your beef is booked.</h2>
         <p style={{ marginTop: "var(--space-md)", color: "var(--ink-2)" }}>
-          Order <strong className="mono">{placed.code}</strong> — a confirmation is on its way to {placed.email}.
+          Order <strong className="mono">{placed.code}</strong>
+          {backendConfigured()
+            ? <> — a confirmation is on its way to {placed.email}.</>
+            : <> — save this code.</>}
         </p>
+
+        {STRIPE_PAYMENT_LINK ? (
+          <div className="pay-panel" style={{ marginTop: "var(--space-lg)", textAlign: "left" }}>
+            <span className="tag">One more step</span>
+            <p className="small" style={{ marginBottom: "var(--space-md)" }}>
+              Your share is held once the {money(DEPOSIT)} deposit is in. Card payment is secure through Stripe;
+              your order code travels with it so we can match it up.
+            </p>
+            <a className="btn btn-on-dark btn-wide" href={depositUrl(placed.code, placed.email)} target="_blank" rel="noreferrer">
+              Pay {money(DEPOSIT)} deposit now
+            </a>
+          </div>
+        ) : (
+          <div className="group-note" style={{ marginTop: "var(--space-lg)", textAlign: "left" }}>
+            <span className="tag">Deposit</span>
+            <span>
+              {RANCH_CONTACT.name} will reach out to collect your {money(DEPOSIT)} deposit — or call/text
+              him at {RANCH_CONTACT.phone} with order code <strong className="mono">{placed.code}</strong>.
+            </span>
+          </div>
+        )}
+
         <div className="next-steps">
           {[
             ["Now", `Your ${money(DEPOSIT)} deposit holds your ${SHARES[placed.share].label.toLowerCase()}. You can adjust your cut sheet until ${HARVEST.orderBy}.`],
@@ -203,11 +260,14 @@ export default function Order() {
                     onChange={(e) => setWho({ ...who, [k]: e.target.value })} />
                 </div>
               ))}
-              <button className="btn btn-dark btn-wide" disabled={!who.name || !who.email || !who.phone} onClick={place}>
-                Pay {money(DEPOSIT)} deposit
+              <button className="btn btn-dark btn-wide" disabled={placing || !who.name || !who.email || !who.phone} onClick={place}>
+                {placing ? "Reserving…" : `Reserve & pay ${money(DEPOSIT)} deposit`}
               </button>
+              {placeError && <p className="small" style={{ color: "var(--rust)" }}>{placeError}</p>}
               <p className="small mute" style={{ textAlign: "center" }}>
-                Card payment at launch — this preview records the reservation without charging.
+                {STRIPE_PAYMENT_LINK
+                  ? "Next: secure card payment through Stripe."
+                  : `${RANCH_CONTACT.name} will collect your deposit after you reserve.`}{" "}
                 Questions? Call or text {RANCH_CONTACT.name}: {RANCH_CONTACT.phone}.
               </p>
             </div>
