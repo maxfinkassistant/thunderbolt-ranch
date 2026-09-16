@@ -17,9 +17,9 @@ not a month-long build. Ship the minimum that takes real deposits.*
 - [x] Order backend written: `apps-script/Code.gs` → Google Sheet CRM + ranch notification + customer confirmation emails
 - [x] Deposit hand-off to a Stripe Payment Link with the order code attached
 - [x] Ranch Office key validated server-side (no passcode in client code once the backend is on)
-- [ ] **Max:** deploy the Apps Script web app → send me the `/exec` URL
+- [x] Apps Script backend deployed from thunderboltbeef@gmail.com; live on the site (test order TR-TESTITZ round-tripped: sheet row + customer email confirmed)
 - [ ] **Max:** create the $250 Stripe Payment Link → send me the URL
-- [ ] Me: set both as repo variables → auto-redeploy → real end-to-end test order
+- [ ] Me: set the Stripe link as a repo variable → auto-redeploy → confirm the deposit button
 - [ ] Remove the TR-SAMPLE1 seed order once real orders flow (it's local-only demo data; harmless on the sheet)
 - [ ] Butcher sanity-check of the wizard's per-cut count estimates (`src/data/config.ts` yields)
 - [ ] Decide refund policy language for pre-deadline cancellations (deposit currently described as applying to total; confirm refundability wording)
