@@ -11,13 +11,15 @@ not a month-long build. Ship the minimum that takes real deposits.*
 - [x] Order tracking with status timeline; back-office CRM at /customers (roster, notes, CSV, CCMC PDFs)
 - [x] Gen 2 (split-a-cow) parked in `gen2/`; FAQ and delivery removed
 
-## Week 1 — take real money
-- [ ] Domain + deploy to Vercel (site is one `bun run build` away)
-- [ ] Supabase for orders (schema mirrors `src/lib/store.ts`); swap localStorage bodies
-- [ ] Stripe Checkout for the $250 deposit; webhook marks order reserved
-- [ ] Real auth on /customers (replace the KERSEY passcode)
-- [ ] Confirmation email via Resend (order summary + cut-sheet PDF attached)
-- [ ] Remove the TR-SAMPLE1 seed order for production
+## Launch day (Sept 16) — see docs/SETUP-TODAY.md
+- [x] **Live at https://maxfinkassistant.github.io/thunderbolt-ranch/** (GitHub Pages, auto-deploys from `main`)
+- [x] Order backend written: `apps-script/Code.gs` → Google Sheet CRM + ranch notification + customer confirmation emails
+- [x] Deposit hand-off to a Stripe Payment Link with the order code attached
+- [x] Ranch Office key validated server-side (no passcode in client code once the backend is on)
+- [ ] **Max:** deploy the Apps Script web app → send me the `/exec` URL
+- [ ] **Max:** create the $250 Stripe Payment Link → send me the URL
+- [ ] Me: set both as repo variables → auto-redeploy → real end-to-end test order
+- [ ] Remove the TR-SAMPLE1 seed order once real orders flow (it's local-only demo data; harmless on the sheet)
 - [ ] Butcher sanity-check of the wizard's per-cut count estimates (`src/data/config.ts` yields)
 - [ ] Decide refund policy language for pre-deadline cancellations (deposit currently described as applying to total; confirm refundability wording)
 
