@@ -12,7 +12,8 @@ not a month-long build. Ship the minimum that takes real deposits.*
 - [x] Gen 2 (split-a-cow) parked in `gen2/`; FAQ and delivery removed
 
 ## Launch day (Sept 16) — see docs/SETUP-TODAY.md
-- [x] **Live at https://thunderboltbeef.com/** (GitHub Pages, auto-deploys from `main`)
+- [x] **Live at https://thunderboltbeef.com/** (GitHub Pages, auto-deploys from `main`; HTTPS enforced)
+- [x] thunderbolt-ranch.com + www 301-forward to thunderboltbeef.com (Squarespace Domain Forwarding)
 - [x] Order backend written: `apps-script/Code.gs` → Google Sheet CRM + ranch notification + customer confirmation emails
 - [x] Deposit hand-off to a Stripe Payment Link with the order code attached
 - [x] Ranch Office key validated server-side (no passcode in client code once the backend is on)
