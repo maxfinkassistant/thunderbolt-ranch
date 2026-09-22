@@ -4,8 +4,8 @@ import SteerMap from "../components/SteerMap";
 import CutDialog from "../components/CutDialog";
 import {
   SHARES, DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST,
-  USDA_CHOICE, USDA_ALL_FRESH, HARVEST, PROCESSOR, PAYABLE_TO, RANCH_CONTACT,
-  PRIMALS, QUALITY, money, money2,
+  HARVEST, PROCESSOR, PAYABLE_TO, RANCH_CONTACT,
+  PRIMALS, savingsFor, money, money2,
 } from "../data/config";
 
 const STEPS = [
@@ -89,29 +89,43 @@ export default function HowItWorks() {
         <div className="wide">
           <div className="section-head">
             <h2 className="d">Why this beats the grocery store</h2>
+            <p>Three reasons, and none of them require a spreadsheet.</p>
           </div>
-          <div className="cutsheet-grid" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", alignItems: "start" }}>
-            <div className="ticket">
-              <div className="ticket-head">
-                <span className="tag">USDA retail averages · April 2026</span>
-              </div>
-              <div className="ticket-row"><span className="k">Choice beef, national average</span><span className="v">{money2(USDA_CHOICE)}/lb</span></div>
-              <div className="ticket-row"><span className="k">All-fresh beef average</span><span className="v">{money2(USDA_ALL_FRESH)}/lb</span></div>
-              <div className="ticket-row"><span className="k">What it's made of</span><span className="v">A blend of many animals</span></div>
-              <div className="ticket-total">
-                <span>THUNDERBOLT, TAKE-HOME</span>
-                <span className="v">≈ {money2(TAKEHOME_RATE_EST)}/LB</span>
-              </div>
-            </div>
-            <div className="pay-panel">
-              <span className="tag">The difference</span>
-              <p className="small" style={{ marginBottom: "var(--space-sm)" }}>
-                At ≈ {money2(TAKEHOME_RATE_EST)}/lb take-home, Thunderbolt Ranch beats the
-                grocery-store average for the same USDA Choice quality — and you get a full
-                mix of steaks, roasts, and ground beef, not just whatever's on sale.
+          <div className="threes">
+            <div className="three">
+              <div className="num">01 · THE MONEY</div>
+              <h3 className="d">About {money(savingsFor("half").totals.saved)} back on a half</h3>
+              <p>
+                Roughly {money(savingsFor("quarter").totals.saved)} on a quarter
+                and {money(savingsFor("whole").totals.saved)} on a whole, measured against what the
+                same cuts cost on the shelf. One price — {money2(TAKEHOME_RATE_EST)}/lb take-home —
+                covers ribeyes and burger alike, with no processing fees tacked on at the end.
               </p>
-              <p className="small" style={{ color: "var(--on-dark-mute)" }}>{QUALITY}</p>
             </div>
+            <div className="three">
+              <div className="num">02 · THE QUALITY</div>
+              <h3 className="d">One animal, dry-aged 14 days</h3>
+              <p>
+                Angus genetics, pasture-raised and grain-finished for marbling, typically grading
+                Choice or Prime. Store ground beef is a blend of dozens of animals; yours is one.
+                And it hangs two full weeks before it's cut — the tenderizing step supermarket
+                beef almost never gets.
+              </p>
+            </div>
+            <div className="three">
+              <div className="num">03 · THE SOURCE</div>
+              <h3 className="d">American beef, and you know the ranch</h3>
+              <p>
+                Born, raised, and harvested in Colorado, processed by a Colorado butcher twenty
+                minutes up the road. We keep ownership from conception to harvest — no sale
+                barns, no middlemen, no imported trim blended in. You can call Josh and ask
+                about your animal.
+              </p>
+            </div>
+          </div>
+          <div className="hero-actions">
+            <Link to="/order" className="btn btn-solid">Reserve a share</Link>
+            <Link to="/track/TR-SAMPLE1" className="btn btn-ghost">See a finished cut sheet</Link>
           </div>
         </div>
       </section>

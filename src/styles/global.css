@@ -959,3 +959,290 @@ h3.d { font-size: 1.4rem; }
   .site-nav a:not(.nav-cta) { display: none; }
   .steps { display: none; }
 }
+
+/* ============================================================
+   2026-09-22 review additions
+   ============================================================ */
+
+/* ---------------- take-home cards (landing) ---------------- */
+
+.takehome-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--space-md); }
+.takehome {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-lg);
+}
+.takehome .tag { color: var(--rust); display: block; }
+.takehome-num { font-size: clamp(1.9rem, 3.2vw, 2.5rem); margin-top: var(--space-xs); }
+.takehome-num sup { font-size: 0.5em; color: var(--mute); top: -0.7em; }
+.takehome p { margin-top: var(--space-xs); }
+.takehome-rate {
+  margin-top: var(--space-md); padding-top: var(--space-sm);
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em;
+  color: var(--rust); font-weight: 600;
+}
+
+/* ---------------- savings table ---------------- */
+
+.savings-switch { display: flex; gap: var(--space-xs); margin-bottom: var(--space-lg); flex-wrap: wrap; }
+
+.savings-headline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-lg);
+  background: var(--dark);
+  color: var(--on-dark);
+  border-radius: var(--radius);
+  padding: var(--space-xl);
+  margin-bottom: var(--space-lg);
+}
+.savings-headline .tag { color: var(--brass); display: block; margin-bottom: var(--space-xs); }
+.savings-headline .mute { color: var(--on-dark-mute); }
+.savings-big { font-size: clamp(2.4rem, 5vw, 3.4rem); color: var(--brass); line-height: 1; }
+.savings-strike { font-size: clamp(2rem, 4vw, 2.8rem); line-height: 1; text-decoration: line-through; text-decoration-thickness: 2px; opacity: 0.75; }
+
+.savings-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); }
+.savings-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 620px; }
+.savings-table th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mute);
+  padding: 12px 16px;
+  border-bottom: 2px solid var(--ink);
+  white-space: nowrap;
+}
+.savings-table td { padding: 11px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.savings-table .n { text-align: right; }
+.savings-table .cut-name { display: block; font-weight: 600; }
+.savings-table .cut-store { display: block; font-size: 11.5px; color: var(--mute); margin-top: 1px; }
+.savings-table .save { color: var(--sage); font-weight: 600; }
+.savings-table tbody tr:hover td { background: var(--card); }
+.savings-table tfoot td {
+  border-top: 2px solid var(--ink);
+  border-bottom: none;
+  font-weight: 700;
+  background: var(--card);
+}
+.savings-table tfoot .save { color: var(--rust); }
+
+/* ---------------- sample order links ---------------- */
+
+.share-sample {
+  display: block;
+  margin-top: var(--space-md);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--rust);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  width: fit-content;
+}
+.share-sample:hover { border-bottom-color: var(--rust); }
+.share-card.on .share-sample { color: var(--brass); }
+
+.sample-band {
+  margin-top: var(--space-xl);
+  background: var(--dark);
+  color: var(--on-dark);
+  border-radius: var(--radius);
+  padding: var(--space-xl);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xl);
+  flex-wrap: wrap;
+}
+.sample-band .tag { color: var(--brass); }
+.sample-band p { color: var(--on-dark-mute); max-width: 54ch; margin-top: var(--space-sm); }
+
+/* ---------------- wizard artwork ---------------- */
+
+.wizard-visual {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+  align-items: start;
+}
+@media (max-width: 640px) {
+  /* stacked, and the cut photo drops to a banner so the question
+     isn't pushed a full screen down the page */
+  .wizard-visual { grid-template-columns: 1fr; gap: var(--space-xs); }
+  .wizard-cut { min-height: 0; height: 118px; }
+}
+
+.wizard-steer {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-sm);
+}
+.wizard-steer .diagram-hint { margin-top: var(--space-xs); }
+.wizard-steer .diagram-hint b { color: var(--rust); }
+
+.wizard-cut { position: relative; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); height: 100%; min-height: 150px; }
+.wizard-cut img { width: 100%; height: 100%; object-fit: cover; }
+.wizard-cut figcaption {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 24px 14px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: oklch(96% 0.01 90);
+  background: linear-gradient(to top, oklch(20% 0.02 70 / 0.8), transparent);
+}
+
+/* ---------------- most-popular badge ---------------- */
+
+.pop {
+  display: inline-block;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 2px;
+  background: var(--brass-tint);
+  color: oklch(42% 0.09 80);
+  border: 1px solid oklch(80% 0.06 85);
+}
+.opt.on .pop, .keep-btn.on .pop {
+  background: oklch(100% 0 0 / 0.16);
+  color: oklch(98% 0.01 90);
+  border-color: oklch(100% 0 0 / 0.3);
+}
+
+/* ---------------- keep-or-grind rows ---------------- */
+
+.keep-list { display: grid; gap: var(--space-xs); }
+.keep-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-md);
+  align-items: center;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--sage);
+  border-radius: var(--radius);
+  padding: var(--space-sm) var(--space-md);
+}
+.keep-row.unset { border-left-color: var(--rust); background: var(--rust-tint); }
+@media (max-width: 640px) { .keep-row { grid-template-columns: 1fr; } }
+
+.keep-name { font-weight: 600; font-size: 0.95rem; }
+.keep-info .note { font-size: 0.82rem; color: var(--mute); margin-top: 2px; max-width: 48ch; }
+
+.keep-btns { display: flex; gap: var(--space-2xs); }
+.keep-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 104px;
+  padding: 9px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--card);
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.keep-btn:hover { border-color: var(--ink); }
+.keep-btn.on { background: var(--sage); border-color: var(--sage); color: oklch(97% 0.01 140); }
+.keep-btn.grind.on { background: var(--dark); border-color: var(--dark); color: var(--on-dark); }
+
+.blocked-note {
+  margin-top: var(--space-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--rust);
+}
+
+/* ---------------- ground tally ---------------- */
+
+.ground-tally {
+  margin-top: var(--space-lg);
+  background: var(--dark);
+  color: var(--on-dark);
+  border-radius: var(--radius);
+  padding: var(--space-md) var(--space-lg);
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+.ground-tally .tag { color: var(--brass); }
+.ground-tally-num {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  line-height: 1;
+  color: var(--brass);
+  margin-right: auto;
+}
+.ground-tally-sub { font-size: 12px; color: var(--on-dark-mute); font-family: var(--font-mono); letter-spacing: 0.04em; }
+
+/* ---------------- checkbox tiles ---------------- */
+
+.organ.check { display: flex; gap: 12px; align-items: flex-start; }
+.organ.check.wide { width: 100%; }
+.organ .cbox {
+  flex: none;
+  width: 20px; height: 20px;
+  margin-top: 1px;
+  border: 2px solid var(--line-strong);
+  border-radius: 3px;
+  background: var(--card);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  color: transparent;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.organ .organ-name { display: block; font-weight: 600; }
+
+/* checked reads as a tick, not a whole repainted tile */
+.organ.check.on { background: var(--sage-tint); border-color: var(--sage); color: var(--ink); }
+.organ.check.on .cbox { background: var(--sage); border-color: var(--sage); color: oklch(98% 0.01 140); }
+.organ.check.on .note { color: var(--ink-2); opacity: 1; }
+
+.special-block { margin-top: var(--space-lg); padding-top: var(--space-lg); border-top: 1px solid var(--line); }
+.special-block .tag { color: var(--rust); display: block; margin-bottom: var(--space-sm); }
+
+/* ---------------- call-the-butcher call-out ---------------- */
+
+.callout {
+  margin-top: var(--space-lg);
+  background: var(--brass-tint);
+  border: 1px solid oklch(80% 0.06 85);
+  border-radius: var(--radius);
+  padding: var(--space-md) var(--space-lg);
+}
+.callout .tag { color: oklch(42% 0.09 80); display: block; margin-bottom: var(--space-xs); }
+.callout p { font-size: 0.925rem; color: var(--ink-2); }
+.callout a { color: var(--rust); }
+.savings-table .even { color: var(--mute); font-weight: 500; }
+
+/* In the wizard the map isn't clickable — dim everything except the
+   section this question is about, so the highlight actually reads. */
+.wizard-steer .sm-region { fill: oklch(64% 0.095 85 / 0.04); stroke: oklch(90% 0.05 88 / 0.35); }
+.wizard-steer .sm-region.on { fill: oklch(64% 0.13 60 / 0.6); stroke: oklch(96% 0.06 80 / 0.95); stroke-width: 2.5; }
+.wizard-steer .sm-label { fill: oklch(92% 0.01 90 / 0.55); }
+.wizard-visual.solo { grid-template-columns: 1fr; max-width: 560px; }
+
+/* On a phone the "your $/lb" column is the same figure on every row and
+   is already stated above the table — drop it so the rest fits. */
+@media (max-width: 680px) {
+  .savings-table { min-width: 0; font-size: 0.85rem; }
+  .savings-table th, .savings-table td { padding: 10px 10px; }
+  .savings-table th:nth-child(3), .savings-table td:nth-child(3) { display: none; }
+  .savings-table .cut-store { display: none; }
+}

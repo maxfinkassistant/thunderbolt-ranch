@@ -38,10 +38,12 @@ export default function SteerMap({
   active,
   onPick,
 }: {
-  active: string | null;
+  active: string | string[] | null;
   onPick?: (k: string) => void;
 }) {
   const clickable = !!onPick;
+  const lit = active == null ? [] : Array.isArray(active) ? active : [active];
+  const on = (k: string) => lit.includes(k);
   return (
     <div className="steer-map">
       <img src={STEER_PHOTO} alt="" aria-hidden="true" />
@@ -52,14 +54,14 @@ export default function SteerMap({
       >
         <polygon
           points={SHANK2}
-          className={"sm-region" + (active === "shank" ? " on" : "") + (clickable ? " click" : "")}
+          className={"sm-region" + (on("shank") ? " on" : "") + (clickable ? " click" : "")}
           onClick={() => onPick?.("shank")}
         />
         {Object.entries(PHOTO_REGIONS).map(([k, r]) => (
           <polygon
             key={k}
             points={r.pts}
-            className={"sm-region" + (active === k ? " on" : "") + (clickable ? " click" : "")}
+            className={"sm-region" + (on(k) ? " on" : "") + (clickable ? " click" : "")}
             onClick={() => onPick?.(k)}
           />
         ))}

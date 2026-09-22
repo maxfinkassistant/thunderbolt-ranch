@@ -7,6 +7,22 @@
 
 import { MAIN_CUTS, EXTRA_GROUPS, type ShareId, type CutMode } from "../data/config";
 
+/** Keep-or-grind answer. Undefined means "not answered yet" — the
+    barbecue / fast / workhorse groups make people choose. */
+export type KeepGrind = "yes" | "grind";
+
+/** The popular pick for a keep-or-grind cut, used for badges and
+    for estimating before the question has been answered. */
+export function popularExtra(id: string): KeepGrind {
+  for (const g of EXTRA_GROUPS) for (const c of g.cuts) if (c.id === id) return c.popular;
+  return "grind";
+}
+
+/** What to assume for an unanswered keep-or-grind cut. */
+export function effectiveExtra(a: CutSheetAnswers, id: string): KeepGrind {
+  return a.extras[id] ?? popularExtra(id);
+}
+
 /* ---------------- cut sheet answers ---------------- */
 
 export interface MainCutAnswer {
@@ -21,11 +37,13 @@ export interface CutSheetAnswers {
   rib: { choice: "prime" | "ribsteak" | "ribeye"; thickness?: string; perPackage?: string };
   loin: { choice: "tbone" | "strip"; thickness: string; perPackage: string };
   filetThickness?: string;                        // when loin.choice === "strip"
-  extras: Record<string, "yes" | "grind">;        // brisket, flank, …
+  extras: Record<string, KeepGrind | undefined>;  // brisket, flank, … undefined = unanswered
   groundPack: string;                             // "1" | "1.5" | "2"
   patties: boolean;
   pattySize: string;
+  pattyLbs: string;                               // "40 lb"
   organs: string[];
+  tallow: boolean;                                // fat for rendering — special request
   notes: string;
 }
 
@@ -42,14 +60,28 @@ export function defaultCutSheet(): CutSheetAnswers {
     rib: { choice: "ribeye", thickness: "1", perPackage: "2" },
     loin: { choice: "tbone", thickness: "1", perPackage: "2" },
     filetThickness: "1 1/2",
-    extras: Object.fromEntries(
-      EXTRA_GROUPS.flatMap((g) => g.cuts.map((c) => [c.id, c.def])),
-    ),
-    groundPack: "1.5",
+    extras: {},                 // deliberately empty — keep or grind is a required choice
+    groundPack: "1",
     patties: false,
-    pattySize: "5oz",
+    pattySize: "4oz",
+    pattyLbs: "40 lb",
     organs: [],
+    tallow: false,
     notes: "",
+  };
+}
+
+/** A fully answered sheet — used for the sample order people can
+    browse from the front page before they start their own. */
+export function sampleCutSheet(): CutSheetAnswers {
+  return {
+    ...defaultCutSheet(),
+    extras: Object.fromEntries(
+      EXTRA_GROUPS.flatMap((g) => g.cuts.map((c) => [c.id, c.popular])),
+    ),
+    organs: ["soupbones", "oxtail"],
+    tallow: true,
+    notes: "Leaning on the freezer for weeknights — happy to take extra ground.",
   };
 }
 
@@ -101,10 +133,17 @@ export function randomCode(len = 6): string {
 
 /* One sample order so tracking + back office demo themselves. */
 function seed() {
-  if (localStorage.getItem(ORDERS_KEY)) return;
+  const existing = load<Order>(ORDERS_KEY);
+  const sampleRow = existing.find((o) => o.code === "TR-SAMPLE1");
+  /* refresh a stale sample from an older cut-sheet shape */
+  if (sampleRow && sampleRow.cutSheet?.tallow === undefined) {
+    save(ORDERS_KEY, existing.map((o) => (o.code === "TR-SAMPLE1" ? { ...o, cutSheet: sampleCutSheet() } : o)));
+    return;
+  }
+  if (existing.length) return;
   const sample: Order = {
     code: "TR-SAMPLE1", createdAt: "2026-09-02T17:00:00Z", status: "reserved",
-    share: "half", cutSheet: defaultCutSheet(),
+    share: "half", cutSheet: sampleCutSheet(),
     name: "Dana Henderson", email: "dana@example.com", phone: "970-555-0134",
     address: "418 Maple St, Greeley CO", sample: true,
   };

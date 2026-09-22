@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { SHARES, HARVEST } from "../data/config";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { SHARES, HARVEST, type ShareId } from "../data/config";
 import { getOrder, listOrders, STATUS_STEPS, statusIndex, type Order } from "../lib/store";
 import { boxSummary } from "../lib/estimate";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
@@ -8,6 +8,7 @@ import { backendConfigured, fetchOrder } from "../lib/api";
 
 export default function Track() {
   const { code } = useParams();
+  const [params] = useSearchParams();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -78,8 +79,13 @@ export default function Track() {
   }
 
   /* ---------- order detail ---------- */
+  /* the sample order can be re-scoped from the pricing cards */
+  const asked = params.get("share");
+  const viewShare: ShareId =
+    order.sample && asked && asked in SHARES ? (asked as ShareId) : order.share;
+
   const idx = statusIndex(order.status);
-  const lines = boxSummary(order.cutSheet, order.share);
+  const lines = boxSummary(order.cutSheet, viewShare);
   const whenFor = (stepId: string): string => {
     switch (stepId) {
       case "reserved": return new Date(order.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -95,10 +101,20 @@ export default function Track() {
       <div className="section-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "var(--space-md)", maxWidth: "none" }}>
         <div>
           <div className="tag" style={{ color: "var(--rust)", marginBottom: "var(--space-xs)" }}>Order {order.code}</div>
-          <h2 className="d">{SHARES[order.share].label} beef · {HARVEST.label}</h2>
+          <h2 className="d">{SHARES[viewShare].label} beef · {HARVEST.label}</h2>
           <p className="mute" style={{ marginTop: "var(--space-xs)" }}>
             {order.name}{order.sample && " · sample order for demonstration"}
           </p>
+          {order.sample && (
+            <div className="group-note" style={{ marginTop: "var(--space-md)", marginBottom: 0 }}>
+              <span className="tag">Sample</span>
+              <span>
+                This is an example order so you can see what a finished cut sheet looks like.
+                Nothing here is reserved.{" "}
+                <Link to="/order"><b>Build your own →</b></Link>
+              </span>
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", gap: "var(--space-xs)" }}>
           <button
@@ -150,7 +166,7 @@ export default function Track() {
             <span className="tag">Your estimated box</span>
             <span className="mute">{order.code}</span>
           </div>
-          <div className="ticket-row"><span className="k">Share</span><span className="v">{SHARES[order.share].label} beef</span></div>
+          <div className="ticket-row"><span className="k">Share</span><span className="v">{SHARES[viewShare].label} beef</span></div>
           <div className="ticket-row"><span className="k">Harvest</span><span className="v">{HARVEST.label}</span></div>
           <div className="ticket-row"><span className="k">Pickup</span><span className="v">{HARVEST.ready}</span></div>
           <hr className="ticket-sep" />
@@ -162,7 +178,7 @@ export default function Track() {
           ))}
           <div className="ticket-total">
             <span>ESTIMATED TAKE-HOME</span>
-            <span className="v">≈ {SHARES[order.share].takehome} LB</span>
+            <span className="v">≈ {SHARES[viewShare].takehome} LB</span>
           </div>
         </div>
       </div>

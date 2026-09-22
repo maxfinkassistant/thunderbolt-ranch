@@ -5,12 +5,14 @@ import {
   MAIN_CUTS, EXTRA_GROUPS, RIB_CHOICES, LOIN_CHOICES,
   RIB_YIELD, RIB_ROAST_LBS, TBONE_YIELD, STRIP_YIELD, FILET_YIELD,
   THICKNESS_OPTIONS, PER_PACKAGE_OPTIONS, ROAST_SIZE_OPTIONS,
-  GROUND_PACK_OPTIONS, PATTY_SIZES, PATTY_NOTE, ORGANS,
+  GROUND_PACK_OPTIONS, PATTY_SIZES, PATTY_LB_OPTIONS, PATTY_NOTE, ORGANS,
+  TALLOW, CUT_MEDIA,
   steakCount, roastCount, money, money2, PAYABLE_TO, RANCH_CONTACT,
-  type ShareId, type MainCutDef,
+  type ShareId,
 } from "../data/config";
+import SteerMap from "../components/SteerMap";
 import { defaultCutSheet, createOrder, type Order as OrderRow, type CutSheetAnswers } from "../lib/store";
-import { boxSummary, groundEstimate, shareCost } from "../lib/estimate";
+import { boxSummary, groundEstimate, looseGround, shareCost } from "../lib/estimate";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
 import { backendConfigured, submitOrder } from "../lib/api";
 import { STRIPE_PAYMENT_LINK } from "../data/config";
@@ -30,7 +32,7 @@ const QUESTIONS = [
   "rib", "loin",
   ...MAIN_CUTS.map((c) => `main:${c.id}`),
   ...EXTRA_GROUPS.map((g) => `extras:${g.id}`),
-  "ground", "organs",
+  "ground", "organs", "notes",
 ] as const;
 
 export default function Order() {
@@ -164,17 +166,16 @@ export default function Order() {
                 {s.id === "half" && <span className="share-badge">Most popular</span>}
                 <div className="d">{s.label} beef</div>
                 <div className="d" style={{ fontSize: "2rem", marginTop: 6, color: on ? "var(--brass)" : "var(--rust)" }}>
-                  {money(s.total)}
+                  {money(s.total)}<sup>*</sup>
                 </div>
                 <div className="share-specs">
-                  <span>{s.hanging} LBS HANGING</span>
-                  <span>{s.takehome} LBS TAKE-HOME (EST)</span>
+                  <span>≈ {s.takehome} LBS TAKE-HOME<sup>*</sup></span>
                   <span className="hot">FREEZER {s.freezer}</span>
                 </div>
                 <p className="share-feeds">Feeds {s.feeds}.</p>
                 <div className="share-price">
                   <span className="small" style={{ opacity: 0.75 }}>{money(DEPOSIT)} deposit</span>
-                  <strong>{money(s.total - DEPOSIT)} at pickup</strong>
+                  <strong>{money(s.total - DEPOSIT)} at pickup<sup>*</sup></strong>
                 </div>
               </button>
             );
@@ -182,9 +183,10 @@ export default function Order() {
         </div>
 
         <p className="small mute measure" style={{ marginBottom: "var(--space-lg)" }}>
-          Estimates based on a typical 1,500 lb animal — your actual animal may run somewhat
-          above or below these figures. Next: a short walk-through builds your custom cut
-          sheet, one question at a time. Every answer has a safe default, so you can't get it wrong.
+          <sup>*</sup>Estimates based on a typical 1,500 lb animal — your actual animal may run
+          somewhat above or below these figures, and you pay {money2(HANGING_RATE)}/lb on its
+          real hanging weight. Next: a short walk-through builds your custom cut sheet, one
+          question at a time, with a photo and a plain-English explanation for every cut.
         </p>
 
         <div className="hero-actions" style={{ marginTop: 0 }}>
@@ -282,8 +284,11 @@ export default function Order() {
   /* ============ WIZARD ============ */
   const qid = QUESTIONS[q];
   const progress = `${q + 1} of ${QUESTIONS.length}`;
+  const visual = CUT_MEDIA[qid];
 
-  const Chips = ({ opts, value, onPick, dark }: { opts: readonly string[]; value?: string; onPick: (v: string) => void; dark?: boolean }) => (
+  const Popular = () => <span className="pop">Most popular</span>;
+
+  const Chips = ({ opts, value, onPick }: { opts: readonly string[]; value?: string; onPick: (v: string) => void }) => (
     <div className="chips">
       {opts.map((o) => (
         <button key={o} className={"chip" + (value === o ? " on" : "")} onClick={() => onPick(o)}>{o}</button>
@@ -310,6 +315,8 @@ export default function Order() {
   let title = "";
   let where = "";
   let help = "";
+  let blocked = false;          // required answers still missing
+  let blockedNote = "";
 
   if (qid === "rib") {
     title = "The rib section";
@@ -348,8 +355,8 @@ export default function Order() {
     );
   } else if (qid === "loin") {
     title = "The short loin";
-    where = "The middle of the back — the strip on top of the bone, the tenderloin underneath.";
-    help = "A T-bone is both muscles still joined at the bone. Cut the bone away and the same meat becomes NY strips and true filet mignon. Same beef, one decision — there's no wrong answer, only preference.";
+    where = "The middle of the back.";
+    help = "A T-bone is a filet and a NY strip, still joined at the bone. Or we cut the bone away and you get each of them on their own.";
     const tb = steakCount(TBONE_YIELD, frac, inches(a.loin.thickness));
     const st = steakCount(STRIP_YIELD, frac, inches(a.loin.thickness));
     const fi = steakCount(FILET_YIELD, frac, inches(a.filetThickness ?? "1 1/2"));
@@ -398,6 +405,7 @@ export default function Order() {
           {cut.modes.map((mo) => (
             <button key={mo} className={"opt" + (ans.mode === mo ? " on" : "")} onClick={() => setMain({ mode: mo })}>
               <div className="lbl">{modeLabels[mo]}</div>
+              {cut.popular === mo && <Popular />}
             </button>
           ))}
         </div>
@@ -424,24 +432,43 @@ export default function Order() {
     );
   } else if (qid.startsWith("extras:")) {
     const group = EXTRA_GROUPS.find((g) => g.id === qid.slice(7))!;
+    const unanswered = group.cuts.filter((c) => !a.extras[c.id]).length;
     title = group.title;
     where = group.intro;
-    help = "Keep it and it comes home as the cut; grind it and it joins your ground beef. Tap to flip each one.";
+    help = "Keep it and it comes home as that cut; grind it and it joins your ground beef. Pick one for each — there's no default here.";
+    blocked = unanswered > 0;
+    blockedNote = unanswered === 1
+      ? "One cut still needs a keep-or-grind answer."
+      : `${unanswered} cuts still need a keep-or-grind answer.`;
+    const setExtra = (id: string, v: "yes" | "grind") =>
+      setA({ ...a, extras: { ...a.extras, [id]: v } });
     body = (
-      <div className="organ-grid">
+      <div className="keep-list">
         {group.cuts.map((c) => {
-          const keep = a.extras[c.id] === "yes";
+          const v = a.extras[c.id];
           return (
-            <button key={c.id} className={"organ" + (keep ? " on" : "")}
-              onClick={() => setA({ ...a, extras: { ...a.extras, [c.id]: keep ? "grind" : "yes" } })}>
-              <div style={{ fontWeight: 600 }}>{c.name} — {keep ? "keep" : "grind"}</div>
-              <div className="note">{c.help}</div>
-            </button>
+            <div className={"keep-row" + (v ? "" : " unset")} key={c.id}>
+              <div className="keep-info">
+                <div className="keep-name">{c.name}</div>
+                <div className="note">{c.help}</div>
+              </div>
+              <div className="keep-btns" role="group" aria-label={`${c.name}: keep or grind`}>
+                <button className={"keep-btn" + (v === "yes" ? " on" : "")} aria-pressed={v === "yes"}
+                  onClick={() => setExtra(c.id, "yes")}>
+                  Keep it{c.popular === "yes" && <Popular />}
+                </button>
+                <button className={"keep-btn grind" + (v === "grind" ? " on" : "")} aria-pressed={v === "grind"}
+                  onClick={() => setExtra(c.id, "grind")}>
+                  Grind it{c.popular === "grind" && <Popular />}
+                </button>
+              </div>
+            </div>
           );
         })}
       </div>
     );
   } else if (qid === "ground") {
+    const loose = looseGround(a, share!);
     title = "Ground beef";
     where = `Everything you didn't keep whole, plus the trim — you're at roughly ${ground[0]}–${ground[1]} lb.`;
     help = "This is the package you'll reach for most. Pick the size that matches how you cook, and decide if you want some pressed into patties.";
@@ -452,6 +479,7 @@ export default function Order() {
             <button key={p.id} className={"opt" + (a.groundPack === p.id ? " on" : "")} onClick={() => setA({ ...a, groundPack: p.id })}>
               <div className="lbl">{p.label}</div>
               <div className="det">{p.note}</div>
+              {p.popular && <Popular />}
             </button>
           ))}
         </div>
@@ -464,10 +492,24 @@ export default function Order() {
             </span>
           </label>
           {a.patties && (
-            <div className="chips" style={{ marginTop: "var(--space-sm)", marginLeft: 28 }}>
-              {PATTY_SIZES.map((s) => (
-                <button key={s} className={"chip" + (a.pattySize === s ? " on" : "")} onClick={() => setA({ ...a, pattySize: s })}>{s}</button>
-              ))}
+            <div style={{ marginLeft: 28, marginTop: "var(--space-md)" }}>
+              <div className="tag" style={{ color: "var(--mute)", marginBottom: "var(--space-sm)" }}>Patty size</div>
+              <div className="chips">
+                {PATTY_SIZES.map((sz) => (
+                  <button key={sz.id} className={"chip" + (a.pattySize === sz.id ? " on" : "")} onClick={() => setA({ ...a, pattySize: sz.id })}>
+                    {sz.label}
+                  </button>
+                ))}
+              </div>
+              <p className="chip-note">{PATTY_SIZES.find((sz) => sz.id === a.pattySize)?.note}</p>
+
+              <div className="tag" style={{ color: "var(--mute)", margin: "var(--space-md) 0 var(--space-sm)" }}>How much goes to patties</div>
+              <Chips opts={PATTY_LB_OPTIONS} value={a.pattyLbs} onPick={(v) => setA({ ...a, pattyLbs: v })} />
+              {loose && (
+                <p className="chip-note">
+                  That leaves roughly <b>{loose[0]}–{loose[1]} lb</b> as loose ground in {a.groundPack} lb packages.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -483,29 +525,83 @@ export default function Order() {
           {ORGANS.map((o) => {
             const on = a.organs.includes(o.id);
             return (
-              <button key={o.id} className={"organ" + (on ? " on" : "")}
+              <button key={o.id} className={"organ check" + (on ? " on" : "")}
+                role="checkbox" aria-checked={on}
                 onClick={() => setA({ ...a, organs: on ? a.organs.filter((x) => x !== o.id) : [...a.organs, o.id] })}>
-                <div style={{ fontWeight: 600 }}>{o.label}</div>
-                <div className="note">{o.note}</div>
+                <span className="cbox" aria-hidden="true">{on ? "✓" : ""}</span>
+                <span>
+                  <span className="organ-name">{o.label}</span>
+                  <span className="note">{o.note}</span>
+                </span>
               </button>
             );
           })}
         </div>
-        <div className="field" style={{ marginTop: "var(--space-lg)" }}>
-          <label htmlFor="o-notes">Anything else for the butcher?</label>
-          <textarea id="o-notes" rows={3} value={a.notes} onChange={(e) => setA({ ...a, notes: e.target.value })}
+
+        <div className="special-block">
+          <span className="tag">Special request</span>
+          <button className={"organ check wide" + (a.tallow ? " on" : "")}
+            role="checkbox" aria-checked={a.tallow}
+            onClick={() => setA({ ...a, tallow: !a.tallow })}>
+            <span className="cbox" aria-hidden="true">{a.tallow ? "✓" : ""}</span>
+            <span>
+              <span className="organ-name">{TALLOW.label}</span>
+              <span className="note">{TALLOW.note}</span>
+            </span>
+          </button>
+        </div>
+      </>
+    );
+  } else if (qid === "notes") {
+    title = "Special requests";
+    where = "Anything the form doesn't have a box for.";
+    help = "Tell us how you cook and we'll pass it along — extra-thick steaks for one cut, bones cut short for your stock pot, a package count that suits your freezer.";
+    body = (
+      <>
+        <div className="field">
+          <label htmlFor="o-notes">Notes for the butcher</label>
+          <textarea id="o-notes" rows={5} value={a.notes} onChange={(e) => setA({ ...a, notes: e.target.value })}
             placeholder="Questions, special requests, how you plan to cook things…" />
+        </div>
+        <div className="callout">
+          <span className="tag">One more step for special requests</span>
+          <p>
+            Anything out of the ordinary — tallow, unusual thicknesses, custom package
+            counts — isn't a box on the butcher's form. After you submit your order,
+            give {PROCESSOR.name} a call at <a href={`tel:${PROCESSOR.phone}`}><b>{PROCESSOR.phone}</b></a> and
+            talk it through with them directly. Have your order code handy.
+          </p>
+          <p className="small mute" style={{ marginTop: "var(--space-xs)" }}>
+            Your notes ride along on your cut sheet, and {RANCH_CONTACT.name} sees them too — {RANCH_CONTACT.phone}.
+          </p>
         </div>
       </>
     );
   }
 
   return (
-    <main className="page order-main" style={{ maxWidth: 760 }}>
+    <main className="page order-main" style={{ maxWidth: 860 }}>
       <div className="wizard-top">
         <span className="tag" style={{ color: "var(--rust)" }}>Your cut sheet · question {progress}</span>
         <div className="wizard-bar"><div style={{ width: `${((q + 1) / QUESTIONS.length) * 100}%` }} /></div>
       </div>
+
+      {visual && (
+        <div className={"wizard-visual" + (visual.photo ? "" : " solo")}>
+          <div className="wizard-steer">
+            <SteerMap active={visual.regions} />
+            <p className="diagram-hint">
+              {visual.note ?? <>Highlighted: where <b>{title.toLowerCase()}</b> comes from</>}
+            </p>
+          </div>
+          {visual.photo && (
+            <figure className="wizard-cut">
+              <img src={visual.photo} alt={visual.alt ?? ""} loading="lazy" />
+              <figcaption>{title}</figcaption>
+            </figure>
+          )}
+        </div>
+      )}
 
       <section className="decision" style={{ padding: "var(--space-xl)" }}>
         <h2 className="d" style={{ fontSize: "1.8rem" }}>{title}</h2>
@@ -514,10 +610,17 @@ export default function Order() {
         {body}
       </section>
 
+      <div className="ground-tally">
+        <span className="tag">Ground beef so far</span>
+        <span className="ground-tally-num">≈ {ground[0]}–{ground[1]} lb</span>
+        <span className="ground-tally-sub">Updates as you keep or grind each cut</span>
+      </div>
+
+      {blocked && <p className="blocked-note">{blockedNote}</p>}
+
       <div className="wizard-nav">
         <button className="btn btn-ghost" onClick={back}>Back</button>
-        <span className="small mute">Ground beef so far: ≈ {ground[0]}–{ground[1]} lb</span>
-        <button className="btn btn-solid" onClick={next}>
+        <button className="btn btn-solid" onClick={next} disabled={blocked}>
           {q === QUESTIONS.length - 1 ? "Review my order" : "Next"}
         </button>
       </div>

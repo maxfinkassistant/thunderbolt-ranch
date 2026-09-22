@@ -10,7 +10,7 @@ import {
   DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST,
   type ShareId,
 } from "../data/config";
-import type { CutSheetAnswers } from "./store";
+import { effectiveExtra, type CutSheetAnswers } from "./store";
 
 const inches = (id?: string) =>
   THICKNESS_OPTIONS.find((t) => t.id === id)?.inches ?? 1;
@@ -73,7 +73,7 @@ export function boxSummary(a: CutSheetAnswers, share: ShareId): BoxLine[] {
   const kept: string[] = [];
   for (const g of EXTRA_GROUPS) {
     for (const c of g.cuts) {
-      if (a.extras[c.id] === "yes") kept.push(c.name);
+      if (effectiveExtra(a, c.id) === "yes") kept.push(c.name);
       else addGround([2, 5]);
     }
   }
@@ -82,14 +82,26 @@ export function boxSummary(a: CutSheetAnswers, share: ShareId): BoxLine[] {
   /* ground */
   lines.push({
     name: "Ground beef",
-    detail: `≈ ${groundLbs[0]}–${groundLbs[1]} lb · ${a.groundPack} lb packs${a.patties ? ` · some as ${a.pattySize} patties` : ""}`,
+    detail: `≈ ${groundLbs[0]}–${groundLbs[1]} lb · ${a.groundPack} lb packs${a.patties ? ` · ${a.pattyLbs ?? "40 lb"} as ${a.pattySize} patties` : ""}`,
   });
 
   if (a.organs.length) {
     lines.push({ name: "Organs & bones", detail: a.organs.join(", ") });
   }
+  if (a.tallow) {
+    lines.push({ name: "Fat for tallow", detail: "Requested" });
+  }
 
   return lines;
+}
+
+/** Pounds of ground left loose after the patty run, for the ground
+    beef question. Returns null when no patties were asked for. */
+export function looseGround(a: CutSheetAnswers, share: ShareId): [number, number] | null {
+  if (!a.patties) return null;
+  const [lo, hi] = groundEstimate(a, share);
+  const patty = parseInt(a.pattyLbs ?? "40") || 40;
+  return [Math.max(0, lo - patty), Math.max(0, hi - patty)];
 }
 
 /** Rough ground-beef total, for the wizard's running tally. */
