@@ -3,21 +3,35 @@
 
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { SHARES, HARVEST, DEPOSIT, PAYABLE_TO, RANCH_CONTACT, money } from "../data/config";
-import { getOrder, type Order } from "../lib/store";
+import { SHARES, DEPOSIT, HANGING_RATE, PAYABLE_TO, RANCH_CONTACT, seasonOf, money } from "../data/config";
+import { getOrder, listSteers, type Order, type Steer } from "../lib/store";
 import { boxSummary } from "../lib/estimate";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
-import { backendConfigured, fetchOrder } from "../lib/api";
+import { backendConfigured, fetchOrder, fetchOffice } from "../lib/api";
 
 export default function CustomerTicket() {
   const { code = "" } = useParams();
   const [order, setOrder] = useState<Order | undefined>(() => getOrder(code));
+  const [steers, setSteers] = useState<Steer[]>(() => (backendConfigured() ? [] : listSteers()));
   const [pdfBusy, setPdfBusy] = useState(false);
 
+  /* the order sheet is the source of truth; the office key (kept for
+     this browser session by the Ranch Office login) also brings the steers */
   useEffect(() => {
-    if (!backendConfigured() || order) return;
-    fetchOrder(code).then((o) => { if (o) setOrder(o); }).catch(() => {});
-  }, [code, order]);
+    if (!backendConfigured()) return;
+    const key = sessionStorage.getItem("tr.admin.key");
+    if (key) {
+      fetchOffice(key)
+        .then((office) => {
+          const o = office.orders.find((x) => x.code.toUpperCase() === code.toUpperCase());
+          if (o) setOrder(o);
+          setSteers(office.steers ?? []);
+        })
+        .catch(() => {});
+    } else {
+      fetchOrder(code).then((o) => { if (o) setOrder(o); }).catch(() => {});
+    }
+  }, [code]);
 
   if (!order) {
     return (
@@ -31,6 +45,16 @@ export default function CustomerTicket() {
   }
 
   const lines = boxSummary(order.cutSheet, order.share);
+  const season = seasonOf(order);
+  const steer = steers.find((s) => s.id === order.steer);
+  /* real money once the steer has been weighed, the estimate until then */
+  const actual = steer?.hangingWeight
+    ? Math.round(steer.hangingWeight * SHARES[order.share].frac * HANGING_RATE)
+    : null;
+  const total = actual ?? SHARES[order.share].total;
+  const readyOn = steer?.readyDate
+    ? new Date(steer.readyDate + "T12:00:00").toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })
+    : null;
 
   return (
     <main className="page order-main" style={{ maxWidth: 680 }}>
@@ -60,8 +84,16 @@ export default function CustomerTicket() {
         <div className="ticket-row"><span className="k">Address</span><span className="v">{order.address || "—"}</span></div>
         <hr className="ticket-sep" />
         <div className="ticket-row"><span className="k">Share</span><span className="v">{SHARES[order.share].label} beef · ~{SHARES[order.share].hanging} lb hanging</span></div>
-        <div className="ticket-row"><span className="k">Harvest</span><span className="v">{HARVEST.label} · kill {HARVEST.killDate}</span></div>
-        <div className="ticket-row"><span className="k">Pickup</span><span className="v">{HARVEST.ready}, Kersey</span></div>
+        <div className="ticket-row"><span className="k">Harvest</span><span className="v">{season.label}</span></div>
+        <div className="ticket-row">
+          <span className="k">Steer</span>
+          <span className="v">
+            {order.steer
+              ? `${order.steer}${steer?.hangingWeight ? ` · ${steer.hangingWeight} lb hanging` : ""}`
+              : "Not assigned yet"}
+          </span>
+        </div>
+        <div className="ticket-row"><span className="k">Pickup</span><span className="v">{readyOn ? `Est. ${readyOn}` : season.pickup}, Kersey</span></div>
         <hr className="ticket-sep" />
         {lines.map((l) => (
           <div className="ticket-row" key={l.name}>
@@ -73,17 +105,19 @@ export default function CustomerTicket() {
           <div className="ticket-row"><span className="k">Notes</span><span className="v">{order.cutSheet.notes}</span></div>
         )}
         <hr className="ticket-sep" />
-        <div className="ticket-row"><span className="k">Total</span><span className="v">{money(SHARES[order.share].total)}</span></div>
+        <div className="ticket-row"><span className="k">Total{actual === null ? " (est.)" : ""}</span><span className="v">{money(total)}</span></div>
         <div className="ticket-row"><span className="k">Deposit</span><span className="v">{money(DEPOSIT)} · paid to {PAYABLE_TO}</span></div>
         <div className="ticket-total">
           <span>BALANCE AT PICKUP</span>
-          <span className="v">{money(SHARES[order.share].total - DEPOSIT)}</span>
+          <span className="v">{money(total - DEPOSIT)}</span>
         </div>
       </div>
 
       <p className="small mute" style={{ marginTop: "var(--space-md)" }}>
-        Ranch questions: {RANCH_CONTACT.name}, {RANCH_CONTACT.phone}. Balance is estimated on
-        typical weights — final number follows the animal's actual hanging weight.
+        Ranch questions: {RANCH_CONTACT.name}, {RANCH_CONTACT.phone}.{" "}
+        {actual === null
+          ? "Balance is estimated on typical weights — final number follows the animal's actual hanging weight."
+          : `Balance is figured on this steer's actual hanging weight at $${HANGING_RATE}/lb.`}
       </p>
     </main>
   );

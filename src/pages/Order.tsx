@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  SHARES, DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST, HARVEST, PROCESSOR,
+  SHARES, DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST, PROCESSOR,
+  SEASONS, CURRENT_SEASON, NEXT_SEASON, seasonOf,
   MAIN_CUTS, EXTRA_GROUPS, RIB_CHOICES, LOIN_CHOICES,
   RIB_YIELD, RIB_ROAST_LBS, TBONE_YIELD, STRIP_YIELD, FILET_YIELD,
   THICKNESS_OPTIONS, PER_PACKAGE_OPTIONS, ROAST_SIZE_OPTIONS,
@@ -11,7 +12,9 @@ import {
   type ShareId,
 } from "../data/config";
 import SteerMap from "../components/SteerMap";
-import { defaultCutSheet, createOrder, type Order as OrderRow, type CutSheetAnswers } from "../lib/store";
+import SteerTracker from "../components/SteerTracker";
+import { defaultCutSheet, createOrder, updateOrder, type Order as OrderRow, type CutSheetAnswers } from "../lib/store";
+import { useAvailability, refreshAvailability, seasonFor, seasonFull, steersLeft, steerCount } from "../lib/availability";
 import { boxSummary, groundEstimate, looseGround, shareCost } from "../lib/estimate";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
 import { backendConfigured, submitOrder } from "../lib/api";
@@ -44,6 +47,7 @@ export default function Order() {
   const [pdfBusy, setPdfBusy] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
+  const availability = useAvailability();
 
   const frac = share ? SHARES[share].frac : 0.5;
   const ground = useMemo(() => (share ? groundEstimate(a, share) : [0, 0] as [number, number]), [a, share]);
@@ -54,16 +58,22 @@ export default function Order() {
   const place = async () => {
     setPlacing(true);
     setPlaceError(null);
-    const order = createOrder({ share: share!, cutSheet: a, ...who });
+    /* fall while the share still fits, winter once it doesn't; the
+       order system has the final say since it sees every order */
+    let order = createOrder({ share: share!, cutSheet: a, season: seasonFor(availability, share!), ...who });
     if (backendConfigured()) {
       try {
         const cost = shareCost(share!);
-        await submitOrder({
+        const res = await submitOrder({
           order,
           summary: boxSummary(a, share!),
           cost: { total: cost.total, deposit: cost.deposit, balance: cost.balance },
           depositLink: depositUrl(order.code, order.email),
         });
+        if (res.season && res.season !== order.season) {
+          updateOrder(order.code, { season: res.season });
+          order = { ...order, season: res.season };
+        }
       } catch (err) {
         setPlacing(false);
         setPlaceError(
@@ -73,6 +83,7 @@ export default function Order() {
         return;
       }
     }
+    refreshAvailability();
     setPlacing(false);
     setPlaced(order);
     window.scrollTo({ top: 0 });
@@ -80,10 +91,20 @@ export default function Order() {
 
   /* ============ CONFIRMATION ============ */
   if (placed) {
+    const season = seasonOf(placed);
+    const rolled = season.id !== CURRENT_SEASON;
     return (
       <main className="page confirm-wrap">
-        <div className="tag" style={{ color: "var(--rust)", marginBottom: "var(--space-md)" }}>Reserved</div>
-        <h2 className="d" style={{ fontSize: "clamp(2.2rem,5vw,3.2rem)" }}>Your beef is booked.</h2>
+        <div className="tag" style={{ color: "var(--rust)", marginBottom: "var(--space-md)" }}>Reserved · {season.label}</div>
+        <h2 className="d" style={{ fontSize: "clamp(2.2rem,5vw,3.2rem)" }}>
+          {rolled ? `Your beef is booked for ${season.name}.` : "Your beef is booked."}
+        </h2>
+        {rolled && (
+          <p style={{ marginTop: "var(--space-md)", color: "var(--ink-2)" }}>
+            Our {SEASONS[CURRENT_SEASON].name} harvest doesn't have a {SHARES[placed.share].label.toLowerCase()} left,
+            so your share is reserved from our {season.name} harvest — pickup {season.pickupText}.
+          </p>
+        )}
         <p style={{ marginTop: "var(--space-md)", color: "var(--ink-2)" }}>
           Order <strong className="mono">{placed.code}</strong>
           {backendConfigured()
@@ -114,10 +135,10 @@ export default function Order() {
 
         <div className="next-steps">
           {[
-            ["Now", `Your ${money(DEPOSIT)} deposit holds your ${SHARES[placed.share].label.toLowerCase()}. You can adjust your cut sheet until ${HARVEST.orderBy}.`],
-            [HARVEST.killDate.replace(", 2026", ""), "Harvest. Your beef dry-ages 14 days at Colorado Custom in Kersey."],
-            [HARVEST.processed.replace(", 2026", ""), "Cut and packaged to your exact cut sheet, vacuum sealed and labeled."],
-            [HARVEST.ready, `Pickup in Kersey — bring coolers for about ${SHARES[placed.share].takehome} lb. Balance of ${money(SHARES[placed.share].total - DEPOSIT)} due to ${PAYABLE_TO}.`],
+            ["Now", `Your ${money(DEPOSIT)} deposit holds your ${SHARES[placed.share].label.toLowerCase()}. You can adjust your cut sheet until your steer goes to the butcher.`],
+            [`This ${season.name}`, "Harvest. Your beef dry-ages 14 days at Colorado Custom in Kersey."],
+            ["After the hang", "Cut and packaged to your exact cut sheet, vacuum sealed and labeled."],
+            [season.pickup, `Pickup in Kersey — we'll confirm the date. Bring coolers for about ${SHARES[placed.share].takehome} lb. Balance of ${money(SHARES[placed.share].total - DEPOSIT)} due to ${PAYABLE_TO}.`],
           ].map(([k, v]) => (
             <div className="next-step" key={k}>
               <div className="when">{k}</div>
@@ -144,11 +165,18 @@ export default function Order() {
 
   /* ============ SHARE PICK ============ */
   if (q === -1) {
+    const season = SEASONS[CURRENT_SEASON];
+    const nextSeason = SEASONS[NEXT_SEASON];
+    const full = seasonFull(availability);
+    /* the picked share no longer fits in what's left of this season */
+    const rolls = !!share && !full && seasonFor(availability, share) !== CURRENT_SEASON;
     return (
       <main className="page order-main">
         <div className="section-head">
           <div className="tag" style={{ color: "var(--rust)", marginBottom: "var(--space-xs)" }}>
-            {HARVEST.label} harvest · order by {HARVEST.orderBy}
+            {full
+              ? `${nextSeason.label} harvest · pickup ${nextSeason.pickupText}`
+              : `${season.label} harvest · pickup ${season.pickupText}`}
           </div>
           <h2 className="d">How much beef?</h2>
           <p>
@@ -158,7 +186,11 @@ export default function Order() {
           </p>
         </div>
 
-        <div className="share-grid" style={{ marginBottom: "var(--space-2xl)" }}>
+        <div style={{ marginBottom: "var(--space-xl)" }}>
+          <SteerTracker compact />
+        </div>
+
+        <div className="share-grid" style={{ marginBottom: rolls ? "var(--space-lg)" : "var(--space-2xl)" }}>
           {Object.values(SHARES).map((s) => {
             const on = share === s.id;
             return (
@@ -181,6 +213,17 @@ export default function Order() {
             );
           })}
         </div>
+
+        {rolls && (
+          <div className="group-note" style={{ marginBottom: "var(--space-xl)" }}>
+            <span className="tag">{nextSeason.name}</span>
+            <span>
+              Only {steerCount(steersLeft(availability))} of a steer is left in the {season.name} harvest,
+              so a {SHARES[share!].label.toLowerCase()} would be reserved from our {nextSeason.name} harvest —
+              pickup {nextSeason.pickupText}.
+            </span>
+          </div>
+        )}
 
         <p className="small mute measure" style={{ marginBottom: "var(--space-lg)" }}>
           <sup>*</sup>Estimates based on a typical 1,500 lb animal — your actual animal may run

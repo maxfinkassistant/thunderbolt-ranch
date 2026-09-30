@@ -2,9 +2,11 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import SteerMap from "../components/SteerMap";
 import CutDialog from "../components/CutDialog";
+import SteerTracker from "../components/SteerTracker";
 import {
   SHARES, DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST,
-  USDA_CHOICE, HARVEST, PROCESSOR, PAYABLE_TO, RANCH_CONTACT,
+  USDA_CHOICE, SEASONS, CURRENT_SEASON, NEXT_SEASON, STORAGE_NOTE,
+  PROCESSOR, PAYABLE_TO, RANCH_CONTACT,
   LIVE_TYP, STORY, QUALITY, IMAGES, PRIMALS, balanceAtPickup,
   savingsFor, money, money2, moneySigned, type ShareId,
 } from "../data/config";
@@ -17,33 +19,82 @@ export default function Landing() {
   const [savingsShare, setSavingsShare] = useState<ShareId>("half");
   const open = openPrimal ? PRIMALS.find((p) => p.id === openPrimal) ?? null : null;
   const sv = savingsFor(savingsShare);
+  const season = SEASONS[CURRENT_SEASON];
+  const nextSeason = SEASONS[NEXT_SEASON];
 
   return (
     <main>
       {/* hero */}
       <section className="page hero wide">
-        <div className="rise">
-          <div className="tag hero-kicker">Colorado cattle · Colorado ranch · Colorado butcher</div>
-          <h1 className="d">Ranch to table.<br />One Angus at a&nbsp;time.</h1>
-          <p className="lede" style={{ marginTop: "var(--space-lg)" }}>{STORY}</p>
-          <div className="hero-actions">
-            <Link to="/order" className="btn btn-solid btn-big">Order beef</Link>
-            <Link to="/how-it-works" className="btn btn-ghost btn-big">How it works</Link>
+        <div className="hero-text">
+          <div className="hero-head rise">
+            <div className="tag hero-kicker">Colorado cattle · Colorado ranch · Colorado butcher</div>
+            <h1 className="d">Ranch to table.<br />One Angus at a&nbsp;time.</h1>
           </div>
-          <div className="hero-fine">
-            <span>{money2(HANGING_RATE)}/LB HANGING WEIGHT</span>
-            <span>≈ {money2(TAKEHOME_RATE_EST)}/LB TAKE-HOME</span>
-            <span>{money(DEPOSIT)} DEPOSIT, ANY SIZE</span>
+          <div className="hero-body rise">
+            <p className="lede">{STORY}</p>
+            <div className="hero-actions">
+              <Link to="/order" className="btn btn-solid btn-big">Order beef</Link>
+              <Link to="/how-it-works" className="btn btn-ghost btn-big">How it works</Link>
+            </div>
+            <div className="hero-fine">
+              <span>{money2(HANGING_RATE)}/LB HANGING WEIGHT</span>
+              <span>≈ {money2(TAKEHOME_RATE_EST)}/LB TAKE-HOME</span>
+              <span>{money(DEPOSIT)} DEPOSIT, ANY SIZE</span>
+            </div>
           </div>
         </div>
-        <div className="diagram-card rise rise-1">
-          <SteerMap active={active} onPick={(k) => { setActive(k); setOpenPrimal(k); }} />
-          <p className="diagram-hint">Tap a section to see what it yields in a quarter, half, or whole.</p>
+        {/* on a phone the tracker sits right under the headline */}
+        <div className="hero-side">
+          <SteerTracker />
+          <div className="diagram-card rise rise-1">
+            <SteerMap active={active} onPick={(k) => { setActive(k); setOpenPrimal(k); }} />
+            <p className="diagram-hint">Tap a section to see what it yields in a quarter, half, or whole.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* what you take home, and what it costs */}
+      <section className="page section section-tint">
+        <div className="wide">
+          <div className="section-head">
+            <h2 className="d">What you take home, and what it costs</h2>
+            <p>
+              Forget live weight and hanging weight. Two numbers matter: the total you pay,
+              and the beef that goes in your freezer — cut, wrapped, and labeled.
+            </p>
+          </div>
+          <div className="takehome-grid">
+            {Object.values(SHARES).map((s) => (
+              <div className="takehome" key={s.id}>
+                <span className="tag">{s.label}</span>
+                <div className="takehome-pair">
+                  <div>
+                    <div className="d takehome-num takehome-cost">{money(s.total)}<sup>*</sup></div>
+                    <p className="small mute">total cost, everything included</p>
+                  </div>
+                  <div>
+                    <div className="d takehome-num">≈ {s.takehome} lb<sup>*</sup></div>
+                    <p className="small mute">of finished beef in your freezer</p>
+                  </div>
+                </div>
+                <div className="takehome-rate">
+                  ≈ {money2(TAKEHOME_RATE_EST)}/lb all in · fills {s.freezer} of freezer
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="small mute" style={{ marginTop: "var(--space-md)", maxWidth: "75ch" }}>
+            <sup>*</sup>Close estimates from a typical {LIVE_TYP.toLocaleString()} lb animal — yours
+            may run somewhat above or below. You pay {money2(HANGING_RATE)}/lb on your animal's
+            actual hanging weight, so the final number is real. {money(DEPOSIT)} of the total is
+            your deposit; the rest is due at pickup.
+          </p>
         </div>
       </section>
 
       {/* one price strip */}
-      <section className="page" style={{ paddingBottom: "var(--space-2xl)" }}>
+      <section className="page" style={{ paddingTop: "var(--space-2xl)", paddingBottom: "var(--space-2xl)" }}>
         <div className="wide dark-panel">
           <div>
             <span className="tag">Your price, everything included</span>
@@ -88,41 +139,6 @@ export default function Landing() {
               rich marbling, and processed locally at Colorado Custom in Kersey. We maintain
               ownership from conception to harvest — no sale barns, no middlemen.
             </p>
-          </div>
-        </div>
-      </section>
-
-      {/* what you take home */}
-      <section className="page section">
-        <div className="wide">
-          <div className="section-head">
-            <h2 className="d">What you actually take home</h2>
-            <p>
-              Forget live weight and hanging weight. The only number that matters is the
-              beef that goes in your freezer — cut, wrapped, labeled, and paid for.
-            </p>
-          </div>
-          <div className="cutsheet-grid" style={{ gridTemplateColumns: "minmax(0,3fr) minmax(0,2fr)", alignItems: "start" }}>
-            <div className="takehome-grid">
-              {Object.values(SHARES).map((s) => (
-                <div className="takehome" key={s.id}>
-                  <span className="tag">{s.label}</span>
-                  <div className="d takehome-num">≈ {s.takehome} lb<sup>*</sup></div>
-                  <p className="small mute">of finished beef · fills about {s.freezer} of freezer</p>
-                  <div className="takehome-rate">≈ {money2(TAKEHOME_RATE_EST)}/lb all in</div>
-                </div>
-              ))}
-            </div>
-            <div className="three" style={{ background: "var(--card)" }}>
-              <div className="num">GOOD TO KNOW</div>
-              <h3 className="d">Every animal is different</h3>
-              <p>
-                <sup>*</sup>These are close estimates from a typical {LIVE_TYP.toLocaleString()} lb
-                animal — yours may run somewhat above or below. Use them as a reliable guide,
-                not an exact promise. You pay {money2(HANGING_RATE)}/lb on your animal's actual
-                hanging weight, so the final number is real.
-              </p>
-            </div>
           </div>
         </div>
       </section>
@@ -248,7 +264,7 @@ export default function Landing() {
           </p>
           <div style={{ marginTop: "var(--space-lg)", display: "flex", gap: "var(--space-md)", alignItems: "center", flexWrap: "wrap" }}>
             <Link to="/order" className="btn btn-dark">Start an order</Link>
-            <span className="small mute">Order by {HARVEST.orderBy} for the {HARVEST.label} harvest.</span>
+            <span className="small mute">{season.label} harvest · pickup {season.pickupText}.</span>
           </div>
         </div>
       </section>
@@ -294,15 +310,19 @@ export default function Landing() {
       <section className="page section section-tint">
         <div className="wide">
           <div className="section-head">
-            <h2 className="d">Timeline &amp; pickup — {HARVEST.label}</h2>
-            <p>One harvest this fall. Reserve by {HARVEST.orderBy}.</p>
+            <h2 className="d">Timeline &amp; pickup — {season.label}</h2>
+            <p>
+              We harvest by season, a set number of steers at a time. Once this {season.name}'s
+              steers are all reserved, new orders are placed in our {nextSeason.name} harvest —
+              pickup {nextSeason.pickupText}.
+            </p>
           </div>
           <div className="cal-grid" style={{ marginBottom: "var(--space-xl)" }}>
             {[
-              { d: "Sept 16", t: "Cattle harvested" },
-              { d: "Sept 16–30", t: "14-day hang — dry aging & tenderizing" },
-              { d: "Sept 30", t: "Processed & packaged into your custom cuts" },
-              { d: "Week of Oct 1", t: "Ready for pickup in Kersey" },
+              { d: `This ${season.name}`, t: "Your steer is harvested at Colorado Custom in Kersey" },
+              { d: "14 days", t: "On the hook — dry aging & tenderizing" },
+              { d: "Cut to order", t: "Processed & packaged into your custom cuts" },
+              { d: season.pickup, t: "Ready for pickup in Kersey — we'll confirm your date" },
             ].map((x) => (
               <div className="cal-card" key={x.d} style={{ cursor: "default" }}>
                 <div className="d" style={{ color: "var(--rust)" }}>{x.d}</div>
@@ -315,7 +335,7 @@ export default function Landing() {
             <div>
               <span className="tag">Pickup</span>
               <p>{PROCESSOR.name}<br />{PROCESSOR.address}<br />{PROCESSOR.phone}</p>
-              <p className="dim">{HARVEST.storageNote}</p>
+              <p className="dim">{STORAGE_NOTE}</p>
             </div>
             <div>
               <span className="tag">Who you pay</span>

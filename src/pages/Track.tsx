@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { SHARES, HARVEST, type ShareId } from "../data/config";
+import { SHARES, seasonOf, type ShareId } from "../data/config";
 import { getOrder, listOrders, STATUS_STEPS, statusIndex, type Order } from "../lib/store";
 import { boxSummary } from "../lib/estimate";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
@@ -68,7 +68,7 @@ export default function Track() {
               {mine.map((o) => (
                 <Link key={o.code} to={`/track/${o.code}`} className="member" style={{ textDecoration: "none" }}>
                   <span className="who">{o.name}{o.sample ? " · sample" : ""}</span>
-                  <span className="what">{o.code} · {SHARES[o.share].label.toUpperCase()} · {HARVEST.label.toUpperCase()}</span>
+                  <span className="what">{o.code} · {SHARES[o.share].label.toUpperCase()} · {seasonOf(o).label.toUpperCase()}</span>
                 </Link>
               ))}
             </div>
@@ -84,14 +84,14 @@ export default function Track() {
   const viewShare: ShareId =
     order.sample && asked && asked in SHARES ? (asked as ShareId) : order.share;
 
+  const season = seasonOf(order);
   const idx = statusIndex(order.status);
   const lines = boxSummary(order.cutSheet, viewShare);
   const whenFor = (stepId: string): string => {
     switch (stepId) {
       case "reserved": return new Date(order.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-      case "locked": return "Sept 30";
-      case "processing": return "Sept 16–30";
-      case "ready": return HARVEST.ready;
+      case "processing": return "14-day hang";
+      case "ready": return season.pickup;
       default: return "";
     }
   };
@@ -101,7 +101,7 @@ export default function Track() {
       <div className="section-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "var(--space-md)", maxWidth: "none" }}>
         <div>
           <div className="tag" style={{ color: "var(--rust)", marginBottom: "var(--space-xs)" }}>Order {order.code}</div>
-          <h2 className="d">{SHARES[viewShare].label} beef · {HARVEST.label}</h2>
+          <h2 className="d">{SHARES[viewShare].label} beef · {season.label}</h2>
           <p className="mute" style={{ marginTop: "var(--space-xs)" }}>
             {order.name}{order.sample && " · sample order for demonstration"}
           </p>
@@ -155,7 +155,7 @@ export default function Track() {
           {order.status === "reserved" && (
             <div className="group-note" style={{ marginTop: "var(--space-sm)", marginBottom: 0 }}>
               <span className="tag">Held</span>
-              <span>Your cut sheet can be adjusted until <strong>{HARVEST.orderBy}</strong>. Call or text Josh at 402-245-8195.</span>
+              <span>Your cut sheet can be adjusted until <strong>your steer goes to the butcher</strong>. Call or text Josh at 402-245-8195.</span>
             </div>
           )}
         </div>
@@ -167,8 +167,8 @@ export default function Track() {
             <span className="mute">{order.code}</span>
           </div>
           <div className="ticket-row"><span className="k">Share</span><span className="v">{SHARES[viewShare].label} beef</span></div>
-          <div className="ticket-row"><span className="k">Harvest</span><span className="v">{HARVEST.label}</span></div>
-          <div className="ticket-row"><span className="k">Pickup</span><span className="v">{HARVEST.ready}</span></div>
+          <div className="ticket-row"><span className="k">Harvest</span><span className="v">{season.label}</span></div>
+          <div className="ticket-row"><span className="k">Pickup</span><span className="v">{season.pickup}</span></div>
           <hr className="ticket-sep" />
           {lines.map((l) => (
             <div className="ticket-row" key={l.name}>

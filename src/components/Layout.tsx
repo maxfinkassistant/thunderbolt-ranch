@@ -1,11 +1,23 @@
 import { NavLink, Link, Outlet } from "react-router-dom";
-import { RANCH_CONTACT, PROCESSOR, PAYABLE_TO, ASSET } from "../data/config";
+import { RANCH_CONTACT, PROCESSOR, PAYABLE_TO, ASSET, SEASONS, CURRENT_SEASON, NEXT_SEASON } from "../data/config";
+import { useAvailability, seasonFull, steerCount } from "../lib/availability";
 
 export default function Layout() {
+  const a = useAvailability();
+  const season = SEASONS[CURRENT_SEASON];
+  const next = SEASONS[NEXT_SEASON];
   return (
     <>
       <div className="site-banner">
-        OCTOBER 2026 HARVEST — ORDER BY <b>SEPTEMBER 30</b> · PICKUP AT COLORADO CUSTOM MEAT CO, KERSEY
+        {seasonFull(a) ? (
+          <>{season.label.toUpperCase()} IS FULLY RESERVED · <b>NOW BOOKING {next.name.toUpperCase()}</b> — PICKUP {next.pickup.toUpperCase()}</>
+        ) : (
+          <>
+            {season.label.toUpperCase()} HARVEST ·{" "}
+            <b>{a.known && a.reserved > 0 ? `${steerCount(a.reserved)} OF ${a.capacity} STEERS RESERVED` : `${a.capacity} STEERS`}</b>
+            {" "}· PICKUP {season.pickup.toUpperCase()} AT COLORADO CUSTOM MEAT CO, KERSEY
+          </>
+        )}
       </div>
       <header className="site-header">
         <Link to="/" className="brand" aria-label="Thunderbolt Ranch home" style={{ display: "flex", alignItems: "center", gap: 12 }}>

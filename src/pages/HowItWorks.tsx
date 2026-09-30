@@ -4,35 +4,39 @@ import SteerMap from "../components/SteerMap";
 import CutDialog from "../components/CutDialog";
 import {
   SHARES, DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST,
-  HARVEST, PROCESSOR, PAYABLE_TO, RANCH_CONTACT,
+  SEASONS, CURRENT_SEASON, NEXT_SEASON, STORAGE_NOTE,
+  PROCESSOR, PAYABLE_TO, RANCH_CONTACT,
   PRIMALS, savingsFor, money, money2,
 } from "../data/config";
+
+const SEASON = SEASONS[CURRENT_SEASON];
+const NEXT = SEASONS[NEXT_SEASON];
 
 const STEPS = [
   {
     when: "Today",
     t: "Reserve your share",
-    b: `Pick a quarter, half, or whole. A ${money(DEPOSIT)} deposit holds your beef — same deposit for every size, and it applies to your total.`,
+    b: `Pick a quarter, half, or whole. A ${money(DEPOSIT)} deposit holds your beef — same deposit for every size, and it applies to your total. We harvest a set number of steers each season; once this ${SEASON.name}'s are reserved, new orders are placed in our ${NEXT.name} harvest (pickup ${NEXT.pickupText}).`,
   },
   {
-    when: `By ${HARVEST.orderBy}`,
+    when: "Before harvest",
     t: "Build your cut sheet",
     b: "A guided walk-through asks one question at a time — steak thickness, roast sizes, ground beef ratio — with plain-English explanations of every cut. We fill out the butcher's official cutting form from your answers. Your beef, your way.",
   },
   {
-    when: "Sept 16",
+    when: `This ${SEASON.name}`,
     t: "Harvest",
     b: `Your animal is processed at ${PROCESSOR.name} in Kersey — a Colorado butcher, twenty minutes up the road from the ranch.`,
   },
   {
-    when: "Sept 16–30",
+    when: "14 days",
     t: "The 14-day hang",
     b: "Your beef dry-ages for two weeks — the old-fashioned tenderizing step most store beef never gets. Then it's cut to your sheet, vacuum-sealed, and labeled.",
   },
   {
-    when: HARVEST.ready,
+    when: SEASON.pickup,
     t: "Pick up in Kersey",
-    b: `Grab coolers and collect your beef at Colorado Custom. Your balance is due to ${PAYABLE_TO} — you pay on your animal's actual hanging weight, so the number is real, not an estimate. ${HARVEST.storageNote}`,
+    b: `Grab coolers and collect your beef at Colorado Custom. Your balance is due to ${PAYABLE_TO} — you pay on your animal's actual hanging weight, so the number is real, not an estimate. ${STORAGE_NOTE}`,
   },
 ];
 
@@ -171,7 +175,7 @@ export default function HowItWorks() {
           <div>
             <span className="tag">Pickup &amp; payment</span>
             <p>{PROCESSOR.name}, {PROCESSOR.address}. Deposit and balance paid to {PAYABLE_TO}.</p>
-            <p className="dim">Pickup only, {HARVEST.ready}. {HARVEST.storageNote}</p>
+            <p className="dim">Pickup only, {SEASON.pickupText}. {STORAGE_NOTE}</p>
           </div>
           <div>
             <span className="tag">Questions?</span>

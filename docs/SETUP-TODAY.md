@@ -52,6 +52,22 @@ The site appends `client_reference_id=<order code>` and the customer's email to 
 | Cut sheet PDFs | Ranch Office → "CCMC PDF" on any order → email to order@ccmeatco.com |
 | Deposits | Stripe dashboard → Payments (each shows the order code) |
 
+## Updating the order script (whenever `apps-script/Code.gs` changes)
+
+The 2026-09-30 version adds seasons, the steers-reserved tracker, and steer tracking.
+Until it's deployed the site still works, but the tracker shows no count and the Ranch
+Office's Steers tab is read-only.
+
+1. **https://script.google.com**, signed in as thunderboltbeef@gmail.com → open **Thunderbolt Orders**.
+2. Select everything in `Code.gs`, paste the whole new `apps-script/Code.gs` over it, **Save**.
+3. **Deploy → Manage deployments** → pencil icon on the existing web app → **Version: New version** → **Deploy**.
+   (Editing the existing deployment keeps the same `/exec` URL. A *new* deployment would change it.)
+4. Check: open `<your /exec URL>?action=availability` — it should answer with `capacity` and `reserved`.
+
+The script adds a **Steers** tab and **Steer** / **Season** columns to the order sheet on
+its own. Every row in the Orders tab counts toward the front-page tracker, so delete the
+test rows first.
+
 ## Later (not today)
 
 - thunderbolt-ranch.com forwards to thunderboltbeef.com (Squarespace → Domain forwarding)

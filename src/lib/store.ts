@@ -5,7 +5,10 @@
    order shape.
    ============================================================ */
 
-import { MAIN_CUTS, EXTRA_GROUPS, type ShareId, type CutMode } from "../data/config";
+import {
+  MAIN_CUTS, EXTRA_GROUPS, SHARES, CURRENT_SEASON, SEASON_STEERS,
+  type ShareId, type CutMode, type SeasonId,
+} from "../data/config";
 
 /** Keep-or-grind answer. Undefined means "not answered yet" — the
     barbecue / fast / workhorse groups make people choose. */
@@ -89,7 +92,7 @@ export function sampleCutSheet(): CutSheetAnswers {
 
 export type OrderStatus =
   | "reserved"      // deposit in, share held
-  | "locked"        // past Sept 30 deadline, cut sheet sent to butcher
+  | "locked"        // cut sheet sent to the butcher
   | "processing"    // harvested, hanging at Colorado Custom
   | "ready"         // packaged, ready for pickup
   | "picked-up";
@@ -104,11 +107,41 @@ export interface Order {
   email: string;
   phone: string;
   address: string;         // CCMC cut sheet wants it
+  season?: SeasonId;       // which harvest it's reserved from; absent = current
+  steer?: string;          // Steer.id, once the ranch links it
   sample?: boolean;
+}
+
+/* ---------------- steers + season (back office) ---------------- */
+
+export interface Steer {
+  id: string;              // the ranch's tag / ID
+  season: SeasonId;
+  hangingWeight?: number;  // lb, once it's on the hook
+  readyDate?: string;      // yyyy-mm-dd, estimated
+}
+
+/** What the front-page tracker is built from. */
+export interface SeasonSettings {
+  capacity: number;        // steers set aside this season
+  offline: number;         // steers' worth reserved off the site
+}
+
+export const DEFAULT_SETTINGS: SeasonSettings = { capacity: SEASON_STEERS, offline: 0 };
+
+/** Steers' worth of beef reserved in the current season: every
+    real order's share, plus whatever was sold off the site. */
+export function reservedSteers(orders: Order[], settings: SeasonSettings): number {
+  const online = orders
+    .filter((o) => !o.sample && (o.season ?? CURRENT_SEASON) === CURRENT_SEASON)
+    .reduce((t, o) => t + SHARES[o.share].frac, 0);
+  return online + settings.offline;
 }
 
 const ORDERS_KEY = "tr.orders.v2";
 const NOTES_KEY = "tr.notes.v2";
+const STEERS_KEY = "tr.steers.v1";
+const SETTINGS_KEY = "tr.season.v1";
 
 function load<T>(key: string): T[] {
   try {
@@ -173,12 +206,50 @@ export function createOrder(input: Omit<Order, "code" | "createdAt" | "status">)
   return order;
 }
 
-export function updateOrderStatus(code: string, status: OrderStatus) {
+export function updateOrder(code: string, patch: Partial<Pick<Order, "status" | "season" | "steer">>) {
   const rows = listOrders();
   const i = rows.findIndex((o) => o.code === code);
   if (i < 0) return;
-  rows[i] = { ...rows[i], status };
+  rows[i] = { ...rows[i], ...patch };
   save(ORDERS_KEY, rows);
+}
+
+export function updateOrderStatus(code: string, status: OrderStatus) {
+  updateOrder(code, { status });
+}
+
+/* ---------------- steers + season, local demo copies ----------------
+   Used when there's no backend; with one, the order sheet owns these. */
+
+export function listSteers(): Steer[] {
+  return load<Steer>(STEERS_KEY);
+}
+
+/** Add a steer, or replace the one currently called `originalId`. */
+export function saveSteer(steer: Steer, originalId?: string) {
+  const rows = listSteers().filter((s) => s.id !== (originalId ?? steer.id) && s.id !== steer.id);
+  rows.push(steer);
+  save(STEERS_KEY, rows);
+  if (originalId && originalId !== steer.id) {
+    save(ORDERS_KEY, listOrders().map((o) => (o.steer === originalId ? { ...o, steer: steer.id } : o)));
+  }
+}
+
+export function deleteSteer(id: string) {
+  save(STEERS_KEY, listSteers().filter((s) => s.id !== id));
+  save(ORDERS_KEY, listOrders().map((o) => (o.steer === id ? { ...o, steer: undefined } : o)));
+}
+
+export function getSettings(): SeasonSettings {
+  try {
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+export function saveSettings(settings: SeasonSettings) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
 /* ---------------- customer notes (admin) ---------------- */
@@ -201,10 +272,10 @@ export function setNote(email: string, text: string) {
 /* ---------------- status timeline ---------------- */
 
 export const STATUS_STEPS: { id: OrderStatus; label: string; blurb: string }[] = [
-  { id: "reserved", label: "Reserved", blurb: "Deposit in. Your share is held, and your cut sheet can still be changed until Sept 30." },
-  { id: "locked", label: "Cut sheet locked", blurb: "Sept 30 has passed — your cutting instructions are with Colorado Custom." },
+  { id: "reserved", label: "Reserved", blurb: "Deposit in. Your share is held, and your cut sheet can still be changed until your steer goes to the butcher." },
+  { id: "locked", label: "Cut sheet locked", blurb: "Your cutting instructions are with Colorado Custom." },
   { id: "processing", label: "Hanging & processing", blurb: "Your beef is dry aging 14 days, then cut and packaged to your instructions." },
-  { id: "ready", label: "Ready for pickup", blurb: "Pick up at Colorado Custom in Kersey the week of Oct 1. Bring coolers." },
+  { id: "ready", label: "Ready for pickup", blurb: "Pick up at Colorado Custom in Kersey. Bring coolers." },
   { id: "picked-up", label: "Picked up", blurb: "Enjoy. Tell us how the first ribeye went." },
 ];
 

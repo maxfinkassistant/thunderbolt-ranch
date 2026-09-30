@@ -54,17 +54,41 @@ export const SHARES: Record<ShareId, Share> = {
 
 export const balanceAtPickup = (s: Share) => s.total - DEPOSIT;
 
-/* ---------------- this harvest ---------------- */
+/* ---------------- seasons ----------------
+   Beef is sold by seasonal harvest window, not exact dates: a set
+   number of steers per season, and once those are spoken for new
+   orders roll to the next season. The season ids are mirrored in
+   apps-script/Code.gs — change both together.                    */
 
-export const HARVEST = {
-  label: "October 2026",
-  orderBy: "September 30",
-  killDate: "September 16, 2026",
-  hangWindow: "Sept 16 – 30",
-  processed: "September 30",
-  ready: "Week of October 1",
-  storageNote: "Please plan to pick up during the week of Oct 1 — a $10/day storage fee applies after that grace period.",
+export type SeasonId = "fall-2026" | "winter-2027";
+
+export interface Season {
+  id: SeasonId;
+  label: string;    // "Fall 2026"
+  name: string;     // "fall"
+  pickup: string;      // "Estimated mid-October" — as a label
+  pickupText: string;  // "estimated mid-October" — mid-sentence
+  pickupShort: string; // "mid-October"
+}
+
+export const SEASONS: Record<SeasonId, Season> = {
+  "fall-2026": { id: "fall-2026", label: "Fall 2026", name: "fall", pickup: "Estimated mid-October", pickupText: "estimated mid-October", pickupShort: "mid-October" },
+  "winter-2027": { id: "winter-2027", label: "Winter 2027", name: "winter", pickup: "Estimated January", pickupText: "estimated January", pickupShort: "January" },
 };
+
+export const CURRENT_SEASON: SeasonId = "fall-2026";
+export const NEXT_SEASON: SeasonId = "winter-2027";
+
+/** Steers set aside for the current season. The Ranch Office can
+    change this; it's the fallback until the order system answers. */
+export const SEASON_STEERS = 7;
+
+/** Orders placed before seasons existed belong to the current one. */
+export const seasonOf = (o: { season?: string }): Season =>
+  SEASONS[o.season as SeasonId] ?? SEASONS[CURRENT_SEASON];
+
+export const STORAGE_NOTE =
+  "We'll let you know as soon as your beef is ready. Please plan to pick up within a week of that — a $10/day storage fee applies after that grace period.";
 
 export const PROCESSOR = {
   name: "Colorado Custom Meat Co",

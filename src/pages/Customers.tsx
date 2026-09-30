@@ -4,15 +4,33 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { SHARES, HARVEST, DEPOSIT, money } from "../data/config";
 import {
-  listOrders, updateOrderStatus, getNotes, setNote, STATUS_STEPS,
-  type Order, type OrderStatus,
+  SHARES, SEASONS, CURRENT_SEASON, DEPOSIT, HANGING_RATE, seasonOf, money,
+  type SeasonId,
+} from "../data/config";
+import {
+  listOrders, updateOrder, updateOrderStatus, getNotes, setNote, STATUS_STEPS,
+  listSteers, saveSteer, deleteSteer, getSettings, saveSettings, reservedSteers,
+  DEFAULT_SETTINGS,
+  type Order, type OrderStatus, type Steer, type SeasonSettings,
 } from "../lib/store";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
-import { backendConfigured, checkAdminKey, fetchOrders, pushStatus } from "../lib/api";
+import {
+  backendConfigured, checkAdminKey, fetchOffice, pushStatus,
+  pushSteer, removeSteer, pushAssignment, pushSettings, type Office,
+} from "../lib/api";
+import { refreshAvailability, steerCount } from "../lib/availability";
+import SteerTracker from "../components/SteerTracker";
 
-type Tab = "roster" | "customers";
+type Tab = "roster" | "steers" | "customers";
+
+/** What the order actually costs once its steer has been weighed. */
+function actualTotal(o: Order, steer?: Steer): number | null {
+  return steer?.hangingWeight ? Math.round(steer.hangingWeight * SHARES[o.share].frac * HANGING_RATE) : null;
+}
+
+const fmtDate = (iso?: string) =>
+  iso ? new Date(iso + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
 
 const AUTH_KEY = "tr.admin.v1";
 const KEY_KEY = "tr.admin.key";
@@ -20,14 +38,23 @@ const KEY_KEY = "tr.admin.key";
    validated server-side and never lives in this code. */
 const DEMO_PASSCODE = "KERSEY";
 
-function exportCsv(orders: Order[]) {
-  const head = ["code", "status", "name", "email", "phone", "address", "share", "harvest", "est_takehome_lbs", "total", "deposit", "balance", "created"];
-  const rows = orders.map((o) => [
-    o.code, o.status, o.name, o.email, o.phone, o.address,
-    o.share, HARVEST.label, SHARES[o.share].takehome,
-    SHARES[o.share].total, DEPOSIT, SHARES[o.share].total - DEPOSIT,
-    new Date(o.createdAt).toISOString().slice(0, 10),
-  ]);
+function exportCsv(orders: Order[], steers: Steer[]) {
+  const head = [
+    "code", "status", "name", "email", "phone", "address", "share", "harvest",
+    "steer", "steer_hanging_lbs", "est_ready", "est_takehome_lbs",
+    "total", "actual_total", "deposit", "balance", "created",
+  ];
+  const rows = orders.map((o) => {
+    const steer = steers.find((s) => s.id === o.steer);
+    const actual = actualTotal(o, steer);
+    return [
+      o.code, o.status, o.name, o.email, o.phone, o.address,
+      o.share, seasonOf(o).label,
+      o.steer ?? "", steer?.hangingWeight ?? "", steer?.readyDate ?? "", SHARES[o.share].takehome,
+      SHARES[o.share].total, actual ?? "", DEPOSIT, (actual ?? SHARES[o.share].total) - DEPOSIT,
+      new Date(o.createdAt).toISOString().slice(0, 10),
+    ];
+  });
   const csv = [head, ...rows]
     .map((r) => r.map((c) => `"${String(c).split('"').join('""')}"`).join(","))
     .join("\n");
@@ -39,48 +66,222 @@ function exportCsv(orders: Order[]) {
   URL.revokeObjectURL(url);
 }
 
+/* One steer, editable in place. `steer` undefined = the blank "add" row. */
+function SteerRow({
+  steer, linked, taken, onSave, onRemove,
+}: {
+  steer?: Steer;
+  linked: Order[];
+  taken: string[];                 // ids already in use by other steers
+  onSave: (next: Steer, originalId?: string) => Promise<void> | void;
+  onRemove?: () => void;
+}) {
+  const blank = { id: "", season: CURRENT_SEASON as SeasonId, hangingWeight: "", readyDate: "" };
+  const from = (s?: Steer) =>
+    s ? { id: s.id, season: s.season, hangingWeight: s.hangingWeight ? String(s.hangingWeight) : "", readyDate: s.readyDate ?? "" } : blank;
+  const [d, setD] = useState(() => from(steer));
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setD(from(steer)); }, [steer?.id, steer?.season, steer?.hangingWeight, steer?.readyDate]);
+
+  const id = d.id.trim();
+  const dirty = JSON.stringify(d) !== JSON.stringify(from(steer));
+  const clash = taken.includes(id);
+  const weight = d.hangingWeight.trim() === "" ? undefined : Number(d.hangingWeight);
+  const weightBad = weight !== undefined && !(weight > 0);
+  const claimed = linked.reduce((t, o) => t + SHARES[o.share].frac, 0);
+  const label = steer ? `steer ${steer.id}` : "new steer";
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await onSave({ id, season: d.season, hangingWeight: weight, readyDate: d.readyDate || undefined }, steer?.id);
+      if (!steer) setD(blank);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <tr>
+      <td>
+        <input className="admin-input mono" value={d.id} placeholder={steer ? "" : "Tag or ID"}
+          aria-label={`ID for ${label}`} onChange={(e) => setD({ ...d, id: e.target.value })} />
+        {clash && <span className="admin-sub" style={{ color: "var(--rust)" }}>Already used</span>}
+      </td>
+      <td>
+        <select className="admin-select" value={d.season} aria-label={`Harvest for ${label}`}
+          onChange={(e) => setD({ ...d, season: e.target.value as SeasonId })}>
+          {Object.values(SEASONS).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+        </select>
+      </td>
+      <td>
+        <input className="admin-input mono" type="number" min="0" step="1" inputMode="decimal"
+          value={d.hangingWeight} placeholder="lb" aria-label={`Hanging weight for ${label}`}
+          onChange={(e) => setD({ ...d, hangingWeight: e.target.value })} />
+      </td>
+      <td>
+        <input className="admin-input" type="date" value={d.readyDate} aria-label={`Estimated ready date for ${label}`}
+          onChange={(e) => setD({ ...d, readyDate: e.target.value })} />
+      </td>
+      <td>
+        {steer && (
+          <>
+            <span className={"admin-chip" + (claimed > 1 ? " hot" : claimed === 1 ? " done" : "")}>
+              {claimed === 0 ? "No orders linked" : `${steerCount(claimed)} of 1 claimed`}
+            </span>
+            {linked.map((o) => (
+              <span key={o.code} className="admin-chip">{SHARES[o.share].label} · {o.name}</span>
+            ))}
+          </>
+        )}
+      </td>
+      <td style={{ whiteSpace: "nowrap" }}>
+        <button className="btn btn-ghost" disabled={busy || !id || clash || weightBad || !dirty} onClick={save}>
+          {busy ? "Saving…" : steer ? "Save" : "Add steer"}
+        </button>
+        {onRemove && (
+          <button className="small" style={{ textDecoration: "underline", marginLeft: 12 }} onClick={onRemove}>
+            Remove
+          </button>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+/* The two numbers behind the front-page tracker. */
+function SettingsForm({
+  settings, online, disabled, onSave,
+}: {
+  settings: SeasonSettings;
+  online: number;                  // steers' worth ordered on the site
+  disabled: boolean;
+  onSave: (next: SeasonSettings) => Promise<void> | void;
+}) {
+  const [capacity, setCapacity] = useState(String(settings.capacity));
+  const [offline, setOffline] = useState(String(settings.offline));
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setCapacity(String(settings.capacity));
+    setOffline(String(settings.offline));
+  }, [settings.capacity, settings.offline]);
+
+  const next: SeasonSettings = {
+    capacity: Math.round(Number(capacity)),
+    offline: Math.round(Number(offline) * 4) / 4,   // shares come in quarters
+  };
+  const valid = next.capacity >= 1 && next.offline >= 0;
+  const dirty = next.capacity !== settings.capacity || next.offline !== settings.offline;
+  const season = SEASONS[CURRENT_SEASON].name;
+
+  return (
+    <div className="steer-settings-form">
+      <span className="tag" style={{ color: "var(--rust)" }}>Front-page tracker</span>
+      <div className="pair">
+        <div className="field">
+          <label htmlFor="ss-cap">Steers this {season}</label>
+          <input id="ss-cap" type="number" min="1" step="1" inputMode="numeric" value={capacity}
+            disabled={disabled} onChange={(e) => setCapacity(e.target.value)} />
+        </div>
+        <div className="field">
+          <label htmlFor="ss-off">Reserved off the site</label>
+          <input id="ss-off" type="number" min="0" step="0.25" inputMode="decimal" value={offline}
+            disabled={disabled} onChange={(e) => setOffline(e.target.value)} />
+        </div>
+      </div>
+      <p className="small mute">
+        The tracker counts {season} orders placed on the site — {steerCount(online)} steers' worth
+        right now — plus whatever you've promised off the site. Enter that in steers: a half
+        is 0.5, a quarter is 0.25.
+      </p>
+      <div>
+        <button
+          className="btn btn-dark"
+          disabled={disabled || busy || !valid || !dirty}
+          onClick={async () => { setBusy(true); try { await onSave(next); } finally { setBusy(false); } }}
+        >
+          {busy ? "Saving…" : "Save tracker"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Customers() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem(AUTH_KEY) === "1");
   const [code, setCode] = useState("");
   const [bad, setBad] = useState(false);
+  const [unreachable, setUnreachable] = useState(false);
   const [checking, setChecking] = useState(false);
   const [tab, setTab] = useState<Tab>("roster");
   const [tick, setTick] = useState(0);
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
-  const [remote, setRemote] = useState<Order[] | null>(null);
+  const [remote, setRemote] = useState<Office | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const adminKey = sessionStorage.getItem(KEY_KEY) ?? "";
+  const live = backendConfigured();
   const local = useMemo(() => listOrders(), [tick]);
-  const orders = remote ?? local;
+  const orders = remote?.orders ?? local;
+  const steers = useMemo(() => (live ? remote?.steers ?? [] : listSteers()), [live, remote, tick]);
+  const settings = useMemo(() => (live ? remote?.settings ?? DEFAULT_SETTINGS : getSettings()), [live, remote, tick]);
+  /* an Apps Script from before steer tracking answers without these */
+  const steersReady = !live || !remote || remote.steers !== undefined;
   const notes = useMemo(() => getNotes(), [tick]);
 
   /* pull the roster from the ranch's order system */
   useEffect(() => {
-    if (!authed || !backendConfigured()) return;
+    if (!authed || !live) return;
     let alive = true;
-    fetchOrders(adminKey)
-      .then((rows) => { if (alive) { setRemote(rows); setLoadError(null); } })
+    fetchOffice(adminKey)
+      .then((office) => { if (alive) { setRemote(office); setLoadError(null); } })
       .catch((e) => { if (alive) setLoadError((e as Error).message); });
     return () => { alive = false; };
-  }, [authed, adminKey, tick]);
+  }, [authed, adminKey, tick, live]);
 
-  const changeStatus = async (o: Order, status: OrderStatus) => {
-    updateOrderStatus(o.code, status);
-    if (backendConfigured()) {
-      try { await pushStatus(adminKey, o.code, status); } catch (e) { setLoadError((e as Error).message); }
+  /* Apply a change here right away, send it to the order system, then
+     re-read so the screen shows what was actually saved. */
+  const commit = async (apply: () => void, send: () => Promise<unknown>, optimistic?: (o: Office) => Office) => {
+    if (live) {
+      if (optimistic) setRemote((o) => (o ? optimistic(o) : o));
+      try { await send(); setLoadError(null); } catch (e) { setLoadError((e as Error).message); }
+    } else {
+      apply();
     }
+    refreshAvailability();
     setTick((x) => x + 1);
   };
+
+  const patchOrder = (code: string, patch: Partial<Order>) => (o: Office): Office =>
+    ({ ...o, orders: o.orders.map((x) => (x.code === code ? { ...x, ...patch } : x)) });
+
+  const changeStatus = (o: Order, status: OrderStatus) =>
+    commit(() => updateOrderStatus(o.code, status), () => pushStatus(adminKey, o.code, status), patchOrder(o.code, { status }));
+
+  const assign = (o: Order, patch: { steer?: string; season?: SeasonId }) =>
+    commit(() => updateOrder(o.code, patch), () => pushAssignment(adminKey, o.code, patch), patchOrder(o.code, patch));
+
+  const storeSteer = (next: Steer, originalId?: string) =>
+    commit(() => saveSteer(next, originalId), () => pushSteer(adminKey, next, originalId));
+
+  const dropSteer = (steer: Steer) => {
+    if (!window.confirm(`Remove steer ${steer.id}? Orders linked to it go back to unassigned.`)) return;
+    commit(() => deleteSteer(steer.id), () => removeSteer(adminKey, steer.id));
+  };
+
+  const storeSettings = (next: SeasonSettings) =>
+    commit(() => saveSettings(next), () => pushSettings(adminKey, next), (o) => ({ ...o, settings: next }));
 
   const unlock = async (e: React.FormEvent) => {
     e.preventDefault();
     const key = code.trim();
     if (backendConfigured()) {
       setChecking(true);
-      const ok = await checkAdminKey(key);
+      setUnreachable(false);
+      const result = await checkAdminKey(key);
       setChecking(false);
-      if (!ok) { setBad(true); return; }
+      if (result === "unreachable") { setUnreachable(true); return; }
+      if (result === "bad") { setBad(true); return; }
       sessionStorage.setItem(KEY_KEY, key);
     } else if (key.toUpperCase() !== DEMO_PASSCODE) {
       setBad(true);
@@ -102,9 +303,10 @@ export default function Customers() {
         >
           <div className="field">
             <label htmlFor="pc">Passcode</label>
-            <input id="pc" type="password" value={code} onChange={(e) => { setCode(e.target.value); setBad(false); }} autoFocus />
+            <input id="pc" type="password" value={code} onChange={(e) => { setCode(e.target.value); setBad(false); setUnreachable(false); }} autoFocus />
           </div>
           {bad && <p className="small" style={{ color: "var(--rust)" }}>That's not it. Ask Max or Josh.</p>}
+          {unreachable && <p className="small" style={{ color: "var(--rust)" }}>Couldn't reach the order system. Give it a minute and try again.</p>}
           <button className="btn btn-solid btn-wide" type="submit" disabled={checking}>
             {checking ? "Checking…" : "Open the books"}
           </button>
@@ -135,19 +337,19 @@ export default function Customers() {
     <main className="page order-main" style={{ maxWidth: 1100 }}>
       <div className="admin-bar">
         <div>
-          <div className="tag" style={{ color: "var(--rust)" }}>Back office · {HARVEST.label}</div>
+          <div className="tag" style={{ color: "var(--rust)" }}>Back office · {SEASONS[CURRENT_SEASON].label}</div>
           <h2 className="d" style={{ fontSize: "2rem" }}>Customers &amp; orders</h2>
           <p className="small mute" style={{ marginTop: 4 }}>
             {orders.length} orders · ~{totals.hanging.toLocaleString()} lb hanging committed ·
             {" "}{money(totals.revenue)} booked ({money(totals.deposits)} in deposits)
-            {backendConfigured() && !remote && !loadError && " · loading from the order sheet…"}
-            {!backendConfigured() && " · local demo mode"}
+            {live && !remote && !loadError && " · loading from the order sheet…"}
+            {!live && " · local demo mode"}
           </p>
           {loadError && <p className="small" style={{ color: "var(--rust)" }}>Order system: {loadError}</p>}
         </div>
         <div className="admin-actions">
           <button className="btn btn-ghost" onClick={() => setTick((x) => x + 1)}>Refresh</button>
-          <button className="btn btn-ghost" onClick={() => exportCsv(orders)}>Export CSV</button>
+          <button className="btn btn-ghost" onClick={() => exportCsv(orders, steers)}>Export CSV</button>
           <button className="btn btn-ghost" onClick={() => { sessionStorage.removeItem(AUTH_KEY); sessionStorage.removeItem(KEY_KEY); setAuthed(false); }}>
             Lock up
           </button>
@@ -155,9 +357,11 @@ export default function Customers() {
       </div>
 
       <div className="admin-tabs">
-        {(["roster", "customers"] as Tab[]).map((t) => (
+        {(["roster", "steers", "customers"] as Tab[]).map((t) => (
           <button key={t} className={"admin-tab" + (tab === t ? " on" : "")} onClick={() => setTab(t)}>
-            {t === "roster" ? `Harvest roster (${orders.length})` : `Customers (${customers.length})`}
+            {t === "roster" ? `Harvest roster (${orders.length})`
+              : t === "steers" ? `Steers (${steers.length})`
+              : `Customers (${customers.length})`}
           </button>
         ))}
       </div>
@@ -167,11 +371,14 @@ export default function Customers() {
           <table className="admin-table">
             <thead>
               <tr>
-                <th>Order</th><th>Customer</th><th>Share</th><th>Total</th><th>Status</th><th></th>
+                <th>Order</th><th>Customer</th><th>Share</th><th>Harvest &amp; steer</th><th>Total</th><th>Status</th><th></th>
               </tr>
             </thead>
             <tbody>
-              {orders.map((o) => (
+              {orders.map((o) => {
+                const steer = steers.find((x) => x.id === o.steer);
+                const actual = actualTotal(o, steer);
+                return (
                 <tr key={o.code}>
                   <td className="mono">{o.code}{o.sample && <span className="admin-chip">sample</span>}</td>
                   <td>
@@ -179,7 +386,36 @@ export default function Customers() {
                     <div className="small mute">{o.email}{o.phone && ` · ${o.phone}`}</div>
                   </td>
                   <td>{SHARES[o.share].label} · ~{SHARES[o.share].takehome} lb</td>
-                  <td className="mono">{money(SHARES[o.share].total)}</td>
+                  <td>
+                    <select
+                      className="admin-select"
+                      value={seasonOf(o).id}
+                      disabled={!steersReady}
+                      onChange={(e) => assign(o, { season: e.target.value as SeasonId })}
+                      aria-label={`Harvest for ${o.code}`}
+                    >
+                      {Object.values(SEASONS).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+                    </select>
+                    <select
+                      className="admin-select"
+                      style={{ display: "block", marginTop: 6 }}
+                      value={o.steer ?? ""}
+                      disabled={!steersReady}
+                      onChange={(e) => assign(o, { steer: e.target.value })}
+                      aria-label={`Steer for ${o.code}`}
+                    >
+                      <option value="">No steer yet</option>
+                      {o.steer && !steer && <option value={o.steer}>{o.steer} (removed)</option>}
+                      {steers.map((x) => <option key={x.id} value={x.id}>{x.id}</option>)}
+                    </select>
+                    {steer?.readyDate && <span className="admin-sub">ready ≈ {fmtDate(steer.readyDate)}</span>}
+                  </td>
+                  <td className="mono">
+                    {money(actual ?? SHARES[o.share].total)}
+                    <span className="admin-sub">
+                      {actual !== null ? "actual weight" : "estimate"}
+                    </span>
+                  </td>
                   <td>
                     <select
                       className="admin-select"
@@ -201,15 +437,79 @@ export default function Customers() {
                     <Link className="small" to={`/customers/ticket/${o.code}`}>Ticket</Link>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {orders.length === 0 && (
-                <tr><td colSpan={6} className="mute" style={{ textAlign: "center", padding: "var(--space-xl)" }}>No orders yet.</td></tr>
+                <tr><td colSpan={7} className="mute" style={{ textAlign: "center", padding: "var(--space-xl)" }}>No orders yet.</td></tr>
               )}
             </tbody>
           </table>
           <p className="small mute" style={{ marginTop: "var(--space-sm)" }}>
             "CCMC PDF" downloads the customer's filled cutting-instructions form, ready to email
             to order@ccmeatco.com. Status changes update the customer's tracking page immediately.
+            Link an order to a steer and, once that steer's hanging weight is in, the total
+            switches from the estimate to the real number.
+          </p>
+        </div>
+      )}
+
+      {tab === "steers" && (
+        <div>
+          {!steersReady && (
+            <div className="group-note">
+              <span className="tag">Setup</span>
+              <span>
+                Steer tracking needs the updated order script. Paste the new
+                <span className="mono"> apps-script/Code.gs</span> into the Apps Script project and
+                deploy a new version — steps are in docs/SETUP-TODAY.md.
+              </span>
+            </div>
+          )}
+
+          <div className="steer-settings">
+            <SteerTracker compact />
+            <SettingsForm
+              settings={settings}
+              online={reservedSteers(orders, { ...settings, offline: 0 })}
+              disabled={!steersReady}
+              onSave={storeSettings}
+            />
+          </div>
+
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Steer ID</th><th>Harvest</th><th>Hanging weight</th><th>Est. ready date</th><th>Orders</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {steers.map((st) => (
+                  <SteerRow
+                    key={st.id}
+                    steer={st}
+                    linked={orders.filter((o) => o.steer === st.id)}
+                    taken={steers.filter((x) => x.id !== st.id).map((x) => x.id)}
+                    onSave={storeSteer}
+                    onRemove={() => dropSteer(st)}
+                  />
+                ))}
+                {steers.length === 0 && (
+                  <tr><td colSpan={6} className="mute" style={{ textAlign: "center", padding: "var(--space-xl)" }}>
+                    No steers entered yet. Add the first one below.
+                  </td></tr>
+                )}
+              </tbody>
+              {steersReady && (
+                <tfoot>
+                  <SteerRow linked={[]} taken={steers.map((x) => x.id)} onSave={storeSteer} />
+                </tfoot>
+              )}
+            </table>
+          </div>
+          <p className="small mute" style={{ marginTop: "var(--space-sm)" }}>
+            Enter each steer as you know it — the ID first, hanging weight and ready date when you
+            have them. Link orders to a steer from the Harvest roster tab.
           </p>
         </div>
       )}

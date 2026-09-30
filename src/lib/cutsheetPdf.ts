@@ -3,7 +3,7 @@
    form's AcroForm dictionary. Runs entirely in the browser. */
 
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { SHARES, HARVEST, ASSET, TALLOW, PATTY_SIZES, ORGANS } from "../data/config";
+import { SHARES, ASSET, TALLOW, PATTY_SIZES, ORGANS } from "../data/config";
 import { effectiveExtra, type Order } from "./store";
 
 const X = "X";
@@ -50,7 +50,7 @@ export async function fillCutSheet(order: Order, bytes: ArrayBuffer | Uint8Array
   setText(form, "Text3", order.address);
   setText(form, "Text4", order.email);
   setText(form, "Text5", order.phone);
-  setText(form, "KILL DATE", HARVEST.killDate);
+  /* KILL DATE stays blank — harvest is seasonal, the butcher writes the day in */
   setText(form, "CARCASS WEIGHT", `~${SHARES[order.share].hanging} lb (est)`);
   setText(form, "WHOLE   12   14", SHARES[order.share].label.toUpperCase());
 

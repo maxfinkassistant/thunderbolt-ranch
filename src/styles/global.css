@@ -1246,3 +1246,81 @@ h3.d { font-size: 1.4rem; }
   .savings-table th:nth-child(3), .savings-table td:nth-child(3) { display: none; }
   .savings-table .cut-store { display: none; }
 }
+
+/* ============================================================
+   2026-09-30 — seasons, steer tracker, steer back office
+   ============================================================ */
+
+/* ---------------- steers-reserved tracker ---------------- */
+
+.tracker {
+  margin-top: var(--space-xl);
+  background: var(--card);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  padding: var(--space-md) var(--space-lg) var(--space-lg);
+  max-width: 34rem;
+}
+.tracker .tag { color: var(--rust); display: block; }
+.tracker-count { font-size: clamp(1.35rem, 2.4vw, 1.75rem); line-height: 1.15; margin-top: var(--space-xs); }
+.tracker-count b { color: var(--rust); font-weight: inherit; }
+.tracker-herd { display: grid; gap: clamp(4px, 1vw, 10px); margin-top: var(--space-md); }
+.tracker-herd svg { width: 100%; height: auto; display: block; overflow: visible; }
+.ts-open path { fill: var(--paper-2); stroke: var(--line-strong); stroke-width: 10; stroke-linejoin: round; }
+.ts-tail { fill: none; stroke: var(--line-strong); stroke-width: 12; stroke-linecap: round; }
+.ts-fill { fill: var(--rust); transition: width 0.6s ease; }
+.tracker-note { font-size: 0.9rem; color: var(--ink-2); margin-top: var(--space-md); }
+.tracker-note b { color: var(--ink); }
+.tracker.compact { margin-top: 0; max-width: none; }
+
+/* hero: headline + pitch on the left, tracker over the diagram on the
+   right; one column on a phone, with the tracker right under the headline */
+.hero-text, .hero-side { display: grid; gap: var(--space-lg); min-width: 0; }
+.hero .tracker { margin-top: 0; max-width: none; }
+@media (max-width: 900px) {
+  .hero-text, .hero-side { display: contents; }
+  .hero-head { order: 1; }
+  .hero .tracker { order: 2; }
+  .hero-body { order: 3; }
+  .hero .diagram-card { order: 4; }
+}
+
+/* ---------------- take-home + total cost cards ---------------- */
+
+.takehome-pair { display: grid; gap: var(--space-md); margin-top: var(--space-xs); }
+.takehome-cost { color: var(--rust); }
+
+/* ---------------- back office: steers ---------------- */
+
+.steer-settings {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--space-lg);
+  align-items: start;
+  margin-bottom: var(--space-lg);
+}
+@media (max-width: 900px) { .steer-settings { grid-template-columns: 1fr; } }
+.steer-settings-form {
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-md) var(--space-lg) var(--space-lg);
+  display: grid;
+  gap: var(--space-md);
+}
+.steer-settings-form .pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); }
+.admin-input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  background: var(--card);
+  color: var(--ink);
+  font-size: 0.875rem;
+  font-family: var(--font-body);
+}
+.admin-input:focus-visible { outline: 2px solid var(--rust); }
+.admin-table td .admin-input { min-width: 110px; }
+.admin-table tfoot td { background: var(--paper); border-top: 2px solid var(--line-strong); }
+.admin-sub { display: block; font-size: 0.8rem; color: var(--mute); margin-top: 2px; white-space: nowrap; font-family: var(--font-body); }

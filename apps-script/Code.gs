@@ -6,8 +6,17 @@
  *                                   emails the ranch a notification, emails the
  *                                   customer a confirmation with the deposit link.
  *   GET  ?action=order&code=TR-… → returns one order (customer tracking page).
- *   GET  ?action=list&key=…      → returns all orders (back office; key required).
+ *   GET  ?action=list&key=…      → returns all orders, steers and the season
+ *                                   settings (back office; key required).
+ *   GET  ?action=availability    → how many of this season's steers are reserved
+ *                                   (public; drives the front-page tracker).
  *   POST {action:"status", key, code, status} → updates an order's status.
+ *   POST {action:"assign", key, code, steer?, season?} → links an order to a steer
+ *                                   and/or moves it to another season.
+ *   POST {action:"steer", key, steer, originalId?} → adds or edits a steer.
+ *   POST {action:"steer-delete", key, id}          → removes a steer.
+ *   POST {action:"settings", key, capacity, offline} → steers this season, and
+ *                                   how many were reserved off the site.
  *
  * Setup (once, ~3 minutes) — see docs/SETUP-TODAY.md:
  *   1. script.google.com → New project → paste this file → save.
@@ -17,34 +26,114 @@
  *        SHEET_ID       = (optional) an existing spreadsheet id; leave blank to auto-create
  *   3. Deploy → New deployment → Web app → Execute as: Me · Who has access: Anyone
  *   4. Copy the /exec URL → VITE_BACKEND_URL in the site config.
+ *
+ * Updating later: paste the new file over the old one, save, then
+ *   Deploy → Manage deployments → pencil → Version: New version → Deploy.
+ *   (Editing the existing deployment keeps the same /exec URL.)
  */
+
+/* Seasons — keep in step with SEASONS in the site's src/data/config.ts. */
+const CURRENT_SEASON = "fall-2026";
+const NEXT_SEASON = "winter-2027";
+const SEASON_COPY = {
+  "fall-2026": { name: "fall", pickup: "estimated mid-October" },
+  "winter-2027": { name: "winter", pickup: "estimated January" },
+};
+const DEFAULT_CAPACITY = 7;   // steers this season, until the Ranch Office says otherwise
+const SHARE_FRAC = { quarter: 0.25, half: 0.5, whole: 1 };
 
 const SHEET_NAME = "Orders";
 const HEADERS = [
   "Code", "Created", "Status", "Name", "Email", "Phone", "Address",
   "Share", "Total", "Deposit", "Balance", "Summary", "Notes", "Order JSON",
+  "Steer", "Season",
 ];
+const COL_STATUS = 3, COL_STEER = 15, COL_SEASON = 16;
+
+const STEER_SHEET = "Steers";
+const STEER_HEADERS = ["Steer ID", "Season", "Hanging weight (lb)", "Est. ready date"];
 
 function props_() { return PropertiesService.getScriptProperties(); }
 
-function sheet_() {
+function isAdmin_(key) {
+  const want = String(props_().getProperty("ADMIN_KEY") || "").trim();
+  return !!want && String(key || "").trim() === want;
+}
+
+function book_() {
   const p = props_();
-  let ss;
   const id = p.getProperty("SHEET_ID");
-  if (id) {
-    ss = SpreadsheetApp.openById(id);
-  } else {
-    ss = SpreadsheetApp.create("Thunderbolt Ranch — Orders");
-    p.setProperty("SHEET_ID", ss.getId());
-  }
+  if (id) return SpreadsheetApp.openById(id);
+  const ss = SpreadsheetApp.create("Thunderbolt Ranch — Orders");
+  p.setProperty("SHEET_ID", ss.getId());
+  return ss;
+}
+
+function sheet_() {
+  const ss = book_();
   let sh = ss.getSheetByName(SHEET_NAME);
   if (!sh) {
     sh = ss.insertSheet(SHEET_NAME);
     sh.appendRow(HEADERS);
     sh.setFrozenRows(1);
     sh.getRange(1, 1, 1, HEADERS.length).setFontWeight("bold");
+  } else if (sh.getLastColumn() < HEADERS.length) {
+    /* a sheet from before steers + seasons: add the new column headings */
+    sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight("bold");
   }
   return sh;
+}
+
+function steerSheet_() {
+  const ss = book_();
+  let sh = ss.getSheetByName(STEER_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(STEER_SHEET);
+    sh.appendRow(STEER_HEADERS);
+    sh.setFrozenRows(1);
+    sh.getRange(1, 1, 1, STEER_HEADERS.length).setFontWeight("bold");
+    /* IDs and dates stay exactly as typed — no "007" → 7, no timezone drift */
+    sh.getRange("A:A").setNumberFormat("@");
+    sh.getRange("D:D").setNumberFormat("@");
+  }
+  return sh;
+}
+
+/* A date cell comes back as a Date; hand the site a plain yyyy-mm-dd. */
+function dateText_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  return String(v || "");
+}
+
+function steers_() {
+  const sh = steerSheet_();
+  const last = sh.getLastRow();
+  if (last < 2) return [];
+  return sh.getRange(2, 1, last - 1, STEER_HEADERS.length).getValues()
+    .filter(r => String(r[0]).trim() !== "")
+    .map(r => {
+      const steer = { id: String(r[0]).trim(), season: String(r[1] || CURRENT_SEASON) };
+      if (Number(r[2]) > 0) steer.hangingWeight = Number(r[2]);
+      if (r[3]) steer.readyDate = dateText_(r[3]);
+      return steer;
+    });
+}
+
+function settings_() {
+  const p = props_();
+  const capacity = Number(p.getProperty("SEASON_CAPACITY"));
+  const offline = Number(p.getProperty("SEASON_OFFLINE"));
+  return { capacity: capacity >= 1 ? capacity : DEFAULT_CAPACITY, offline: offline > 0 ? offline : 0 };
+}
+
+/* Steers' worth reserved this season: every order's share, plus
+   what the ranch sold off the site. */
+function availability_() {
+  const s = settings_();
+  const online = rows_().map(orderFromRow_).filter(Boolean)
+    .filter(o => o.season === CURRENT_SEASON)
+    .reduce((t, o) => t + (SHARE_FRAC[o.share] || 0), 0);
+  return { season: CURRENT_SEASON, capacity: s.capacity, reserved: online + s.offline };
 }
 
 function json_(obj) {
@@ -62,6 +151,9 @@ function orderFromRow_(r) {
   try {
     const o = JSON.parse(r[13]);
     o.status = r[2] || o.status;
+    o.steer = String(r[14] || "").trim() || undefined;
+    /* orders from before seasons existed belong to the current one */
+    o.season = String(r[15] || "") || o.season || CURRENT_SEASON;
     return o;
   } catch (e) {
     return null;
@@ -82,8 +174,17 @@ function doGet_(e) {
     return json_({ ok: true, order: row ? orderFromRow_(row) : null });
   }
   if (q.action === "list") {
-    if (!q.key || q.key !== props_().getProperty("ADMIN_KEY")) return json_({ ok: false, error: "bad key" });
-    return json_({ ok: true, orders: rows_().map(orderFromRow_).filter(Boolean) });
+    if (!isAdmin_(q.key)) return json_({ ok: false, error: "bad key" });
+    return json_({
+      ok: true,
+      orders: rows_().map(orderFromRow_).filter(Boolean),
+      steers: steers_(),
+      settings: settings_(),
+    });
+  }
+  if (q.action === "availability") {
+    const a = availability_();
+    return json_({ ok: true, season: a.season, capacity: a.capacity, reserved: a.reserved });
   }
   return json_({ ok: true, service: "thunderbolt-ranch", time: new Date().toISOString() });
 }
@@ -98,14 +199,9 @@ function doPost_(e) {
   let body;
   try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: "bad json" }); }
 
-  if (body.action === "status") {
-    if (!body.key || body.key !== props_().getProperty("ADMIN_KEY")) return json_({ ok: false, error: "bad key" });
-    const sh = sheet_();
-    const rows = rows_();
-    const i = rows.findIndex(r => String(r[0]).toUpperCase() === String(body.code).toUpperCase());
-    if (i < 0) return json_({ ok: false, error: "not found" });
-    sh.getRange(i + 2, 3).setValue(body.status);
-    return json_({ ok: true });
+  if (["status", "assign", "steer", "steer-delete", "settings"].indexOf(body.action) >= 0) {
+    if (!isAdmin_(body.key)) return json_({ ok: false, error: "bad key" });
+    return adminPost_(body);
   }
 
   if (body.action === "order") {
@@ -114,24 +210,110 @@ function doPost_(e) {
     o.email = String(o.email).trim();
     const summary = (body.summary || []).map(l => l.name + ": " + l.detail).join("\n");
     const cost = body.cost || {};
+    /* this season while the share still fits in what's left, otherwise the next */
+    const a = availability_();
+    o.season = a.reserved + (SHARE_FRAC[o.share] || 0) <= a.capacity + 1e-6 ? CURRENT_SEASON : NEXT_SEASON;
     sheet_().appendRow([
       o.code, new Date(o.createdAt || Date.now()), o.status || "reserved",
       o.name, o.email, o.phone, o.address,
       o.share, cost.total, cost.deposit, cost.balance,
       summary, (o.cutSheet && o.cutSheet.notes) || "", JSON.stringify(o),
+      "", o.season,
     ]);
     const emailErrors = [];
     try { notifyRanch_(o, summary, cost); } catch (err) { emailErrors.push("ranch: " + (err && err.message || err)); }
     try { confirmCustomer_(o, summary, cost, body.depositLink); } catch (err) { emailErrors.push("customer: " + (err && err.message || err)); }
-    return json_({ ok: true, code: o.code, emailErrors: emailErrors });
+    return json_({ ok: true, code: o.code, season: o.season, emailErrors: emailErrors });
   }
 
   return json_({ ok: false, error: "unknown action" });
 }
 
+/* ---------------- back office writes (key already checked) ---------------- */
+
+function orderRow_(code) {
+  const i = rows_().findIndex(r => String(r[0]).toUpperCase() === String(code).toUpperCase());
+  return i < 0 ? -1 : i + 2;
+}
+
+function adminPost_(body) {
+  if (body.action === "status") {
+    const row = orderRow_(body.code);
+    if (row < 0) return json_({ ok: false, error: "not found" });
+    sheet_().getRange(row, COL_STATUS).setValue(body.status);
+    return json_({ ok: true });
+  }
+
+  if (body.action === "assign") {
+    const row = orderRow_(body.code);
+    if (row < 0) return json_({ ok: false, error: "not found" });
+    const sh = sheet_();
+    if (body.steer !== undefined) sh.getRange(row, COL_STEER).setNumberFormat("@").setValue(String(body.steer || "").trim());
+    if (body.season) {
+      if (!SEASON_COPY[body.season]) return json_({ ok: false, error: "unknown season" });
+      sh.getRange(row, COL_SEASON).setValue(body.season);
+    }
+    return json_({ ok: true });
+  }
+
+  if (body.action === "steer") {
+    const st = body.steer || {};
+    const id = String(st.id || "").trim();
+    if (!id) return json_({ ok: false, error: "steer needs an ID" });
+    const was = String(body.originalId || id).trim();
+    const sh = steerSheet_();
+    const ids = steers_().map(x => x.id);
+    if (id !== was && ids.indexOf(id) >= 0) return json_({ ok: false, error: "that steer ID is already used" });
+    const values = [id, SEASON_COPY[st.season] ? st.season : CURRENT_SEASON, Number(st.hangingWeight) > 0 ? Number(st.hangingWeight) : "", st.readyDate || ""];
+    const at = steerRow_(was);
+    if (at < 0) sh.appendRow(values);
+    else sh.getRange(at, 1, 1, STEER_HEADERS.length).setValues([values]);
+    if (id !== was) relink_(was, id);
+    return json_({ ok: true });
+  }
+
+  if (body.action === "steer-delete") {
+    const id = String(body.id || "").trim();
+    const at = steerRow_(id);
+    if (at < 0) return json_({ ok: false, error: "not found" });
+    steerSheet_().deleteRow(at);
+    relink_(id, "");
+    return json_({ ok: true });
+  }
+
+  if (body.action === "settings") {
+    const capacity = Math.round(Number(body.capacity));
+    const offline = Math.round(Number(body.offline) * 4) / 4;
+    if (!(capacity >= 1) || !(offline >= 0)) return json_({ ok: false, error: "bad settings" });
+    props_().setProperties({ SEASON_CAPACITY: String(capacity), SEASON_OFFLINE: String(offline) });
+    return json_({ ok: true });
+  }
+
+  return json_({ ok: false, error: "unknown action" });
+}
+
+/* Sheet row of a steer by ID, or -1. */
+function steerRow_(id) {
+  const sh = steerSheet_();
+  const last = sh.getLastRow();
+  if (last < 2) return -1;
+  const i = sh.getRange(2, 1, last - 1, 1).getValues().findIndex(r => String(r[0]).trim() === id);
+  return i < 0 ? -1 : i + 2;
+}
+
+/* Point every order linked to steer `from` at `to` ("" = unassigned). */
+function relink_(from, to) {
+  const sh = sheet_();
+  rows_().forEach((r, i) => {
+    if (String(r[14] || "").trim() === from) sh.getRange(i + 2, COL_STEER).setNumberFormat("@").setValue(to);
+  });
+}
+
 /* ---------------- email ---------------- */
 
 function shareLabel_(s) { return { quarter: "Quarter", half: "Half", whole: "Whole" }[s] || s; }
+function seasonCopy_(id) { return SEASON_COPY[id] || SEASON_COPY[CURRENT_SEASON]; }
+function seasonLabel_(id) { const n = seasonCopy_(id).name; return n.charAt(0).toUpperCase() + n.slice(1); }
 function money_(n) { return "$" + Number(n || 0).toLocaleString(); }
 
 function notifyRanch_(o, summary, cost) {
@@ -143,6 +325,7 @@ function notifyRanch_(o, summary, cost) {
     "",
     "Order: " + o.code,
     "Share: " + shareLabel_(o.share) + " beef",
+    "Harvest: " + seasonLabel_(o.season) + (o.season !== CURRENT_SEASON ? "  (didn't fit in what's left of this season)" : ""),
     "Total: " + money_(cost.total) + "  ·  Deposit: " + money_(cost.deposit) + "  ·  Balance at pickup: " + money_(cost.balance),
     "",
     "Customer: " + o.name,
@@ -164,18 +347,23 @@ function confirmCustomer_(o, summary, cost, depositLink) {
   const payLine = depositLink
     ? "Pay your " + money_(cost.deposit) + " deposit here: " + depositLink
     : "Josh will reach out shortly to collect your " + money_(cost.deposit) + " deposit.";
+  const season = seasonCopy_(o.season);
+  const rolled = o.season !== CURRENT_SEASON;
   const bodyText = [
     "Hi " + (o.name || "").split(" ")[0] + ",",
     "",
     "Thanks for reserving a " + shareLabel_(o.share).toLowerCase() + " beef from Thunderbolt Ranch. Your order code is " + o.code + ".",
+    rolled
+      ? "Our " + seasonCopy_(CURRENT_SEASON).name + " harvest doesn't have a " + shareLabel_(o.share).toLowerCase() + " left, so your share is reserved from our " + season.name + " harvest — pickup " + season.pickup + "."
+      : "Your share comes from our " + season.name + " harvest — pickup " + season.pickup + ".",
     "",
     payLine,
     "Your deposit applies to your total of " + money_(cost.total) + "; the balance of " + money_(cost.balance) + " is due at pickup, payable to Thunderbolt Ranch LLC.",
     "",
     "WHAT HAPPENS NEXT",
-    "Sept 16 — harvest. Your beef dry-ages 14 days at Colorado Custom Meat Co in Kersey.",
-    "Sept 30 — cut and packaged to your cut sheet (you can adjust it until then — just text Josh).",
-    "Week of Oct 1 — pickup at Colorado Custom, 443 4th Street, Kersey CO. Bring coolers.",
+    "This " + season.name + " — harvest. Your beef dry-ages 14 days at Colorado Custom Meat Co in Kersey.",
+    "After the hang — cut and packaged to your cut sheet (you can adjust it until your steer goes to the butcher — just text Josh).",
+    "Pickup, " + season.pickup + " — at Colorado Custom, 443 4th Street, Kersey CO. We'll confirm the date. Bring coolers.",
     "",
     "YOUR CUT SHEET",
     summary,

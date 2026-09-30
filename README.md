@@ -5,8 +5,10 @@ half, or whole, build a custom cut sheet through a guided wizard, and the site f
 Colorado Custom Meat Co's official cutting-instructions PDF from their answers.
 
 Pricing and language follow the Thunderbolt Ranch one-pager: $6/lb hanging weight,
-≈$8.57/lb take-home, $250 deposit for any size, October 2026 harvest, order by Sept 30,
-pickup only in Kersey, payment to Thunderbolt Ranch LLC.
+≈$8.57/lb take-home, $250 deposit for any size, pickup only in Kersey, payment to
+Thunderbolt Ranch LLC. Beef is sold by season rather than by date: a set number of steers
+per harvest (7 for Fall 2026, pickup estimated mid-October), and once those are reserved
+new orders roll to the next season (Winter 2027, estimated January).
 
 ## Run it
 
@@ -25,11 +27,11 @@ bun run dev        # http://localhost:5176
 | `/how-it-works` | 5-step walkthrough, USDA price comparison, what's-in-the-box |
 | `/order` | Share pick → 13-question cut-sheet wizard (explainers + live min–max counts, thickness-aware) → review & $250 deposit → confirmation with filled CCMC PDF download |
 | `/track/:code` | Status timeline + estimated box + cut-sheet PDF |
-| `/customers` | Back office (passcode `KERSEY`, placeholder): roster w/ status control, per-order CCMC PDFs, customer notes, CSV export |
+| `/customers` | Back office (passcode `KERSEY` in local demo; the script's `ADMIN_KEY` when live): roster w/ status control, steers (ID / hanging weight / est. ready date) and order-to-steer linking, front-page tracker settings, per-order CCMC PDFs, customer notes, CSV export |
 
 ## Key files
 
-- `src/data/config.ts` — pricing, harvest dates, wizard schema, yield estimates (butcher should sanity-check), approved brand claims
+- `src/data/config.ts` — pricing, seasons (`SEASONS`, mirrored in `apps-script/Code.gs`), wizard schema, yield estimates (butcher should sanity-check), approved brand claims
 - `src/lib/store.ts` — orders in localStorage (v2 keys), shaped for a backend swap
 - `src/lib/estimate.ts` — box summary + count math; `src/lib/cutsheetPdf.ts` — fills `public/ccmc-cut-sheet.pdf` via pdf-lib
 - `src/components/SteerMap.tsx` — Angus photo (public-domain, warm-toned, `public/angus-steer.jpg`) with traced SVG overlays
