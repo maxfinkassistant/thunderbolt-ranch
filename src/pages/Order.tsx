@@ -253,7 +253,7 @@ export default function Order() {
           <p>This becomes your official Colorado Custom cut sheet — we fill out the butcher's form for you.</p>
         </div>
 
-        <div className="cutsheet-grid" style={{ gridTemplateColumns: "minmax(0,3fr) minmax(0,2fr)" }}>
+        <div className="cutsheet-grid left-heavy">
           <div className="ticket" style={{ alignSelf: "start" }}>
             <div className="ticket-head">
               <span className="tag">Your estimated box</span>

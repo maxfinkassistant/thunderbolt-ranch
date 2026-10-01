@@ -6,19 +6,19 @@ import { SEASONS, CURRENT_SEASON, NEXT_SEASON } from "../data/config";
 import { useAvailability, seasonFull, steerCount } from "../lib/availability";
 import SteerCount from "./SteerCount";
 
-/* A horned steer in profile, drawn for ~40–60px wide: long legs, a
-   withers hump, a dewlap, lyre horns. Facing left; 100 × 62 box. */
-const BODY = `M 26 20
-  C 31 15 39 16 47 17 C 64 15 78 16 86 19 C 91 20 93 26 92 32
-  L 90 40 L 92 60 L 87 60 L 84 48 L 81 60 L 76 60 L 75 44
-  C 64 47 52 47 43 43
-  L 43 60 L 38 60 L 36 48 L 34 60 L 29 60 L 27 43
-  C 23 43 20 40 19 36 C 16 37 11 37 6 35 C 2 33 1 29 2 25 C 4 20 9 17 14 15
-  C 9 12 5 8 6 2 C 8 7 11 11 16 13 L 20 13 C 24 11 28 7 29 2 C 28 8 26 12 24 15
-  C 25 16 26 18 26 20 Z`;
-const EAR = "M 19 14 C 23 14 26 15 28 19 C 24 20 21 18 19 14 Z";
-const TAIL = "M 90 23 C 95 30 96 42 93 50";
-const BOX = { x: -2, y: -2, w: 104, h: 66 };
+/* A deep-chested steer in profile, drawn with straight edges and
+   horns swept up like the emblem. Facing left; 100 × 62 box. */
+const BODY = "M " + [
+  "4,4", "8,9", "16,13", "21,13", "27,9", "33,3", "30,10", "24,15",          // horns
+  "27,19", "32,15", "50,16", "86,15", "94,21", "95,31", "91,41",            // neck, back, rump
+  "93,60", "87,60", "85,48", "81,60", "75,60", "75,45",                     // hind legs
+  "60,48", "42,46",                                                         // belly
+  "42,60", "36,60", "35,49", "33,60", "27,60", "26,45",                     // front legs
+  "21,43", "18,37", "13,35", "6,36", "1,32", "2,25", "9,18", "13,16", "7,11", // dewlap, muzzle, face
+].join(" L ") + " Z";
+const TAIL = "M 93 22 L 97 34 L 95 48";
+const TUFT = "M 93 46 L 97 46 L 95 54 Z";
+const BOX = { x: -1, y: -1, w: 101, h: 63 };
 
 function SteerIcon({ fill }: { fill: number }) {
   const clip = useId();
@@ -27,13 +27,11 @@ function SteerIcon({ fill }: { fill: number }) {
       <defs>
         <clipPath id={clip}>
           <path d={BODY} />
-          <path d={EAR} />
         </clipPath>
       </defs>
       <path className="ts-tail" d={TAIL} />
-      <ellipse className="ts-tuft" cx="93" cy="51" rx="2" ry="3.5" />
+      <path className="ts-tuft" d={TUFT} />
       <g className="ts-open">
-        <path d={EAR} />
         <path d={BODY} />
       </g>
       <rect className="ts-fill" clipPath={`url(#${clip})`} x={BOX.x} y={BOX.y} width={BOX.w * fill} height={BOX.h} />

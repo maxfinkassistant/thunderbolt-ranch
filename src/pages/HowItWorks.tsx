@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import SteerMap from "../components/SteerMap";
-import CutDialog from "../components/CutDialog";
+import ColoradoMap from "../components/ColoradoMap";
 import {
   SHARES, DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST,
   SEASONS, CURRENT_SEASON, NEXT_SEASON, STORAGE_NOTE,
   PROCESSOR, PAYABLE_TO, RANCH_CONTACT,
-  PRIMALS, savingsFor, money, money2,
+  PRIMALS, savingsFor, money, money2, type ShareId,
 } from "../data/config";
 
 const SEASON = SEASONS[CURRENT_SEASON];
@@ -41,9 +41,16 @@ const STEPS = [
 ];
 
 export default function HowItWorks() {
-  const [active, setActive] = useState<string | null>(null);
-  const [openPrimal, setOpenPrimal] = useState<string | null>(null);
-  const open = openPrimal ? PRIMALS.find((p) => p.id === openPrimal) ?? null : null;
+  const [active, setActive] = useState<string | null>("chuck");
+  const [share, setShare] = useState<ShareId>("half");
+
+  /* tapping the steer lights the card up and, on a phone, brings it into view */
+  const pick = (id: string) => {
+    setActive(id);
+    if (window.matchMedia("(max-width: 980px)").matches) {
+      document.getElementById(`primal-${id}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  };
 
   return (
     <main>
@@ -139,22 +146,48 @@ export default function HowItWorks() {
         <div className="wide">
           <div className="section-head">
             <h2 className="d">What comes out of one animal</h2>
-            <p>Tap a section of the steer — every one of these is a question on your cut sheet, with the trade-offs explained as you go.</p>
+            <p>
+              Nine sections, nine decisions on your cut sheet. Tap the steer or a card to see
+              what each one turns into — and switch the size to see your share.
+            </p>
           </div>
-          <div className="cutsheet-grid" style={{ gridTemplateColumns: "minmax(0,3fr) minmax(0,2fr)", alignItems: "start" }}>
-            <div className="diagram-card">
-              <SteerMap active={active} onPick={(k) => { setActive(k); setOpenPrimal(k); }} />
-            </div>
-            <div className="ticket">
-              <div className="ticket-head">
-                <span className="tag">Typical half, at the defaults</span>
+          <div className="primal-grid">
+            <div className="primal-map">
+              <div className="diagram-card">
+                <SteerMap active={active} onPick={pick} />
+                <p className="diagram-hint">Tap a section of the steer.</p>
               </div>
-              {PRIMALS.map((p) => (
-                <div className="ticket-row" key={p.id}>
-                  <span className="k">{p.name}</span>
-                  <span className="v">{p.counts.half}</span>
+            </div>
+            <div>
+              <div className="primal-head">
+                <span className="tag">What's in a</span>
+                <div className="chips" role="group" aria-label="Share size">
+                  {Object.values(SHARES).map((s) => (
+                    <button key={s.id} className={"chip" + (share === s.id ? " on" : "")} onClick={() => setShare(s.id)}>
+                      {s.label}
+                    </button>
+                  ))}
                 </div>
-              ))}
+              </div>
+              <div className="primal-list">
+                {PRIMALS.map((p) => (
+                  <button
+                    key={p.id}
+                    id={`primal-${p.id}`}
+                    className={"primal-row" + (active === p.id ? " on" : "")}
+                    onClick={() => setActive(p.id)}
+                    onMouseEnter={() => setActive(p.id)}
+                    aria-pressed={active === p.id}
+                  >
+                    <img src={p.photo} alt={p.photoAlt} loading="lazy" />
+                    <div>
+                      <div className="name">{p.name}</div>
+                      <p className="where">{p.where}</p>
+                      <div className="yield">{p.counts[share]}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -185,7 +218,38 @@ export default function HowItWorks() {
         </div>
       </section>
 
-      <CutDialog primal={open} onClose={() => setOpenPrimal(null)} />
+      {/* where it all happens */}
+      <section className="page section section-tint">
+        <div className="wide">
+          <div className="section-head">
+            <h2 className="d">Where it all happens</h2>
+            <p>
+              Ranch, butcher, and your freezer — all along the Front Range. Pickup is at
+              Colorado Custom in Kersey, about an hour up the road from the Denver area.
+            </p>
+          </div>
+          <div className="co-map-grid">
+            <ColoradoMap />
+            <ol className="co-legend">
+              <li>
+                <span className="co-legend-num">1</span>
+                <div>
+                  <b>Ranch to butcher.</b> Your steer goes from our pens in northeast Colorado to
+                  {" "}{PROCESSOR.name} in Kersey, where it hangs 14 days and is cut to your sheet.
+                </div>
+              </li>
+              <li>
+                <span className="co-legend-num">2</span>
+                <div>
+                  <b>You drive up.</b> When your beef is ready, head to {PROCESSOR.address}.
+                  Frozen, vacuum-sealed, labeled, and loaded.
+                </div>
+              </li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
     </main>
   );
 }

@@ -476,8 +476,10 @@ h3.d { font-size: 1.4rem; }
 .rail { position: sticky; top: 92px; display: grid; gap: var(--space-md); }
 
 .cutsheet-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: var(--space-xl); }
+.cutsheet-grid.left-heavy { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.cutsheet-grid.halves { grid-template-columns: 1fr 1fr; align-items: start; }
 @media (max-width: 980px) {
-  .cutsheet-grid { grid-template-columns: 1fr; }
+  .cutsheet-grid, .cutsheet-grid.left-heavy, .cutsheet-grid.halves { grid-template-columns: 1fr; }
   .rail { position: static; }
 }
 
@@ -498,7 +500,7 @@ h3.d { font-size: 1.4rem; }
 }
 .ticket-head .tag { color: var(--ink); }
 .ticket-row { display: flex; justify-content: space-between; gap: var(--space-md); padding: 4px 0; }
-.ticket-row .k { color: var(--mute); }
+.ticket-row .k { color: var(--mute); flex: 0 0 auto; }
 .ticket-row .v { text-align: right; font-weight: 500; }
 .ticket-sep { border: none; border-top: 1px solid var(--line); margin: var(--space-sm) 0; }
 .ticket-total {
@@ -990,7 +992,7 @@ h3.d { font-size: 1.4rem; }
 
 .savings-headline {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: var(--space-lg);
   background: var(--dark);
   color: var(--on-dark);
@@ -1001,7 +1003,7 @@ h3.d { font-size: 1.4rem; }
 .savings-headline .tag { color: var(--brass); display: block; margin-bottom: var(--space-xs); }
 .savings-headline .mute { color: var(--on-dark-mute); }
 .savings-big { font-size: clamp(2.4rem, 5vw, 3.4rem); color: var(--brass); line-height: 1; }
-.savings-strike { font-size: clamp(2rem, 4vw, 2.8rem); line-height: 1; opacity: 0.75; }
+.savings-store { color: var(--on-dark); }
 
 .savings-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); }
 .savings-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 620px; }
@@ -1269,8 +1271,8 @@ h3.d { font-size: 1.4rem; }
 .site-banner .frac { vertical-align: 0.15em; }
 .tracker-herd { display: grid; gap: clamp(4px, 1vw, 10px); margin-top: var(--space-md); }
 .tracker-herd svg { width: 100%; height: auto; display: block; overflow: visible; }
-.ts-open path { fill: var(--paper-2); stroke: var(--line-strong); stroke-width: 1.6; stroke-linejoin: round; }
-.ts-tail { fill: none; stroke: var(--line-strong); stroke-width: 1.8; stroke-linecap: round; }
+.ts-open path { fill: var(--paper-2); stroke: var(--line-strong); stroke-width: 1.5; stroke-linejoin: miter; }
+.ts-tail { fill: none; stroke: var(--line-strong); stroke-width: 1.8; stroke-linecap: square; stroke-linejoin: miter; }
 .ts-tuft { fill: var(--line-strong); }
 .ts-fill { fill: var(--rust); transition: width 0.6s ease; }
 .tracker-note { font-size: 0.9rem; color: var(--ink-2); margin-top: var(--space-md); }
@@ -1328,3 +1330,80 @@ h3.d { font-size: 1.4rem; }
 .admin-table td .admin-input { min-width: 110px; }
 .admin-table tfoot td { background: var(--paper); border-top: 2px solid var(--line-strong); }
 .admin-sub { display: block; font-size: 0.8rem; color: var(--mute); margin-top: 2px; white-space: nowrap; font-family: var(--font-body); }
+
+/* ---------------- Colorado map (how it works) ---------------- */
+
+.co-map-grid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); gap: var(--space-xl); align-items: center; }
+@media (max-width: 900px) { .co-map-grid { grid-template-columns: 1fr; } }
+.co-map { width: 100%; height: auto; display: block; }
+.co-state { fill: var(--card); stroke: var(--ink); stroke-width: 2; }
+.co-plains line { stroke: var(--line); stroke-width: 1.5; stroke-linecap: round; }
+.co-north path { fill: var(--ink); }
+.co-north text { fill: var(--ink); font-family: var(--font-mono); font-size: 11px; font-weight: 600; text-anchor: middle; letter-spacing: 0.1em; }
+.co-ranges path { fill: var(--paper-2); stroke: var(--ink-2); stroke-width: 2; stroke-linejoin: miter; }
+.co-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; fill: var(--ink); font-weight: 600; }
+.co-label.co-sub { fill: var(--rust); font-size: 10px; }
+.co-state-label { fill: var(--mute); font-size: 12px; letter-spacing: 0.3em; font-weight: 500; }
+.co-arrowhead { fill: var(--ink); }
+.co-route { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-dasharray: 7 6; }
+.co-road { fill: none; stroke: var(--ink); stroke-width: 9; stroke-linecap: round; }
+.co-road-center { fill: none; stroke: var(--brass); stroke-width: 1.5; stroke-dasharray: 8 7; }
+.co-num circle { fill: var(--rust); }
+.co-num text { fill: var(--on-dark); font-family: var(--font-mono); font-size: 12px; font-weight: 600; text-anchor: middle; }
+.co-shop path, .co-shop rect { fill: var(--paper-2); stroke: var(--ink); stroke-width: 2; stroke-linejoin: miter; }
+.co-shop .co-door { fill: var(--ink); }
+.co-shop .co-awning { fill: var(--rust); stroke: var(--rust); }
+.co-city { fill: var(--ink); }
+.co-city-ring { fill: var(--rust-tint); stroke: var(--line-strong); stroke-width: 1.5; }
+.co-car-body { fill: var(--rust); }
+.co-car-glass { fill: var(--paper); }
+.co-car-wheel { fill: var(--ink); stroke: var(--card); stroke-width: 1.5; }
+
+.co-legend { list-style: none; display: grid; gap: var(--space-lg); }
+.co-legend li { display: grid; grid-template-columns: 28px 1fr; gap: var(--space-sm); font-size: 0.95rem; color: var(--ink-2); }
+.co-legend b { color: var(--ink); }
+.co-legend-num {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--rust); color: var(--on-dark);
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+  display: grid; place-items: center;
+}
+
+/* ---------------- what comes out of one animal (how it works) ---------------- */
+
+.primal-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: var(--space-xl); align-items: start; }
+.primal-map { position: sticky; top: 92px; }
+@media (max-width: 980px) {
+  .primal-grid { grid-template-columns: 1fr; }
+  .primal-map { position: static; }
+}
+.primal-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-md); flex-wrap: wrap; margin-bottom: var(--space-md); }
+.primal-head .tag { color: var(--rust); }
+.primal-list { display: grid; gap: var(--space-xs); }
+.primal-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: var(--space-md);
+  align-items: start;
+  text-align: left;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-sm) var(--space-md);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.primal-row:hover { border-color: var(--line-strong); }
+.primal-row.on { border-color: var(--rust); background: var(--rust-tint); }
+.primal-row:focus-visible { outline: 2px solid var(--rust); outline-offset: 2px; }
+.primal-row img { width: 64px; height: 64px; object-fit: cover; border-radius: 2px; display: block; }
+.primal-row .name { font-family: var(--font-display); font-size: 1.1rem; line-height: 1.2; }
+.primal-row .where { font-size: 0.875rem; color: var(--ink-2); margin-top: 2px; line-height: 1.5; }
+.primal-row .yield {
+  margin-top: 6px;
+  font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.04em;
+  color: var(--rust); font-weight: 600;
+}
+@media (max-width: 560px) {
+  .primal-row { grid-template-columns: 52px 1fr; }
+  .primal-row img { width: 52px; height: 52px; }
+}

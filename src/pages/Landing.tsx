@@ -164,19 +164,24 @@ export default function Landing() {
 
           <div className="savings-headline">
             <div>
-              <span className="tag">You save, versus the shelf</span>
-              <div className="d savings-big">{money(sv.totals.saved)}</div>
+              <span className="tag">Same beef at {GROCERY_SOURCE.store}</span>
+              <div className="d savings-big savings-store">{money(sv.totals.store)}</div>
               <p className="small mute">
-                on a {SHARES[savingsShare].label.toLowerCase()} — about {money2(sv.totals.store / sv.totals.lbs - TAKEHOME_RATE_EST)}/lb
-                across roughly {sv.totals.lbs} lb of beef.
+                blended shelf price ≈ {money2(sv.totals.storePerLb)}/lb across roughly {sv.totals.lbs} lb.
               </p>
             </div>
             <div>
-              <span className="tag">Same beef at the store</span>
-              <div className="d savings-strike">{money(sv.totals.store)}</div>
+              <span className="tag">From Thunderbolt Ranch</span>
+              <div className="d savings-big">{money(sv.totals.yours)}</div>
               <p className="small mute">
-                blended shelf price ≈ {money2(sv.totals.storePerLb)}/lb, against a USDA Choice
-                national average of {money2(USDA_CHOICE)}/lb.
+                the same {sv.totals.lbs} lb at {money2(TAKEHOME_RATE_EST)}/lb, every cut.
+              </p>
+            </div>
+            <div>
+              <span className="tag">You save</span>
+              <div className="d savings-big">{money(sv.totals.saved)}</div>
+              <p className="small mute">
+                on a {SHARES[savingsShare].label.toLowerCase()} — about {money2(sv.totals.store / sv.totals.lbs - TAKEHOME_RATE_EST)}/lb.
               </p>
             </div>
           </div>

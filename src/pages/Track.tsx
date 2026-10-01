@@ -128,7 +128,7 @@ export default function Track() {
         </div>
       </div>
 
-      <div className="cutsheet-grid" style={{ gridTemplateColumns: "minmax(0,2fr) minmax(0,3fr)" }}>
+      <div className="cutsheet-grid">
         {/* timeline */}
         <div>
           <div className="timeline">
