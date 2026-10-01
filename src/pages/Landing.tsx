@@ -228,6 +228,29 @@ export default function Landing() {
             coupon pricing — for the closest comparable cut. They move with the market, so treat
             this as a guide, not a quote.
           </p>
+
+          <div className="threes edge-grid">
+            <div className="three">
+              <div className="num">WHY IT COSTS LESS</div>
+              <h3 className="d">No middleman, no markup stack</h3>
+              <p>
+                Grocery beef passes through a packer, a distributor, a truck, and a store with
+                rent, staff, and shrink — and every one of them takes a cut. Ours goes from our
+                pasture to a butcher twenty minutes up the road to your freezer. We sell direct
+                to our neighbors, so those savings stay here on the Front Range, with you.
+              </p>
+            </div>
+            <div className="three">
+              <div className="num">WHY IT'S BETTER</div>
+              <h3 className="d">One Angus, not a blend</h3>
+              <p>
+                Store beef is a blend of animals from who-knows-where, cut for the shelf. Yours is
+                one Angus steer, pasture-raised and grain-finished on our ranch, typically grading
+                Choice or Prime, dry-aged 14 days, and cut exactly to your sheet. Better beef at a
+                better price — and you know the ranch it came from.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 

@@ -1407,3 +1407,7 @@ h3.d { font-size: 1.4rem; }
   .primal-row { grid-template-columns: 52px 1fr; }
   .primal-row img { width: 52px; height: 52px; }
 }
+
+/* the why-it-costs-less / why-it's-better pair under the savings table */
+.edge-grid { margin-top: var(--space-xl); }
+.edge-grid .three { border-color: var(--rust); border-width: 2px; }
