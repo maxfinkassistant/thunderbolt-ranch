@@ -68,10 +68,17 @@ export function seasonFor(a: Availability, share: ShareId): SeasonId {
   return a.reserved + SHARES[share].frac <= a.capacity + EPS ? CURRENT_SEASON : NEXT_SEASON;
 }
 
-/** 2.75 → "2¾". Shares come in quarters, so the count does too. */
-export function steerCount(n: number): string {
+/** 2.75 → { whole: "2", frac: "¾" }. Shares come in quarters, so the
+    count does too; the fraction is split out so it can be set smaller. */
+export function steerCountParts(n: number): { whole: string; frac: string } {
   const q = Math.round(n * 4);
   const whole = Math.floor(q / 4);
   const frac = ["", "¼", "½", "¾"][q % 4];
-  return whole === 0 && frac ? frac : `${whole}${frac}`;
+  return { whole: whole === 0 && frac ? "" : String(whole), frac };
+}
+
+/** 2.75 → "2¾", for plain text. */
+export function steerCount(n: number): string {
+  const { whole, frac } = steerCountParts(n);
+  return whole + frac;
 }

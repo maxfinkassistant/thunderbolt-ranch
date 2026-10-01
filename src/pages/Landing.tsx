@@ -5,7 +5,7 @@ import CutDialog from "../components/CutDialog";
 import SteerTracker from "../components/SteerTracker";
 import {
   SHARES, DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST,
-  USDA_CHOICE, SEASONS, CURRENT_SEASON, NEXT_SEASON, STORAGE_NOTE,
+  USDA_CHOICE, GROCERY_SOURCE, SEASONS, CURRENT_SEASON, NEXT_SEASON, STORAGE_NOTE,
   PROCESSOR, PAYABLE_TO, RANCH_CONTACT,
   LIVE_TYP, STORY, QUALITY, IMAGES, PRIMALS, balanceAtPickup,
   savingsFor, money, money2, moneySigned, type ShareId,
@@ -188,7 +188,7 @@ export default function Landing() {
                   <th>Cut</th>
                   <th className="n">Lbs</th>
                   <th className="n">Your $/lb</th>
-                  <th className="n">Store $/lb</th>
+                  <th className="n">{GROCERY_SOURCE.store} $/lb</th>
                   <th className="n">You save</th>
                 </tr>
               </thead>
@@ -218,9 +218,10 @@ export default function Landing() {
             </table>
           </div>
           <p className="small mute" style={{ marginTop: "var(--space-md)", maxWidth: "70ch" }}>
-            Pound estimates are for a typical animal. Store prices are surveyed Front Range
-            shelf prices for comparable USDA Choice cuts and move with the market — treat this
-            as a guide, not a quote.
+            Pound estimates are for a typical animal. Store prices are {GROCERY_SOURCE.store}'s
+            regular shelf prices in {GROCERY_SOURCE.where} on {GROCERY_SOURCE.date} — no sale or
+            coupon pricing — for the closest comparable cut. They move with the market, so treat
+            this as a guide, not a quote.
           </p>
         </div>
       </section>

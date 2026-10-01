@@ -442,16 +442,22 @@ export interface GroceryCut {
   lbsWhole: number;  // take-home lbs from a whole animal
 }
 
+/* Regular shelf prices (no sale, coupon or loyalty pricing) read off
+   kingsoopers.com for the Denver area on the date below. King Soopers
+   is the Front Range's biggest grocer, so it's the fairest single
+   yardstick. Re-check these each season — beef moves. */
+export const GROCERY_SOURCE = { store: "King Soopers", where: "Denver", date: "September 30, 2026" };
+
 export const GROCERY_CUTS: GroceryCut[] = [
-  { id: "rib",     name: "Ribeye & rib steaks",     store: "Choice ribeye",            retail: 21.99, lbsWhole: 20 },
-  { id: "loin",    name: "T-bone, strip & filet",   store: "Choice T-bone / strip",    retail: 19.99, lbsWhole: 25 },
-  { id: "sirloin", name: "Sirloin steaks",          store: "Choice top sirloin",       retail: 13.99, lbsWhole: 22 },
-  { id: "fast",    name: "Flank, skirt & tri-tip",  store: "Flank / skirt / tri-tip",  retail: 15.99, lbsWhole: 20 },
-  { id: "roast",   name: "Chuck & round roasts",    store: "Chuck / rump roast",       retail: 9.99,  lbsWhole: 120 },
-  { id: "stew",    name: "Stew meat & cube steak",  store: "Beef stew meat",           retail: 10.49, lbsWhole: 25 },
-  { id: "ribs",    name: "Short ribs & shanks",     store: "Bone-in short ribs",       retail: 9.99,  lbsWhole: 28 },
-  { id: "brisket", name: "Brisket",                 store: "Whole packer brisket",     retail: 9.49,  lbsWhole: 20 },
-  { id: "ground",  name: "Ground beef",             store: "85/15 ground beef",        retail: 8.49,  lbsWhole: 350 },
+  { id: "rib",     name: "Ribeye & rib steaks",     store: "Choice boneless ribeye",       retail: 20.99, lbsWhole: 20 },
+  { id: "loin",    name: "T-bone, strip & filet",   store: "Choice boneless strip steak",  retail: 17.99, lbsWhole: 25 },
+  { id: "sirloin", name: "Sirloin steaks",          store: "Choice top sirloin steak",     retail: 13.99, lbsWhole: 22 },
+  { id: "fast",    name: "Flank, skirt & tri-tip",  store: "Choice flank steak",           retail: 14.99, lbsWhole: 20 },
+  { id: "roast",   name: "Chuck & round roasts",    store: "Choice chuck roast",           retail: 9.99,  lbsWhole: 120 },
+  { id: "stew",    name: "Stew meat & cube steak",  store: "Choice beef for stew",         retail: 10.00, lbsWhole: 25 },
+  { id: "ribs",    name: "Short ribs & shanks",     store: "Boneless short ribs",          retail: 11.99, lbsWhole: 28 },
+  { id: "brisket", name: "Brisket",                 store: "Flat-cut brisket",             retail: 8.99,  lbsWhole: 20 },
+  { id: "ground",  name: "Ground beef",             store: "80/20 ground beef, 1 lb tray", retail: 7.49,  lbsWhole: 350 },
 ];
 
 export interface SavingsRow {

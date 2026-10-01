@@ -4,6 +4,7 @@
 import { useId } from "react";
 import { SEASONS, CURRENT_SEASON, NEXT_SEASON } from "../data/config";
 import { useAvailability, seasonFull, steerCount } from "../lib/availability";
+import SteerCount from "./SteerCount";
 
 /* A horned steer in profile, drawn for ~40–60px wide: long legs, a
    withers hump, a dewlap, lyre horns. Facing left; 100 × 62 box. */
@@ -55,7 +56,7 @@ export default function SteerTracker({ compact = false }: { compact?: boolean })
       ? <>All {capacity} {season.name} steers are reserved</>
       : reserved === 0
         ? <>{capacity} steers this {season.name} — be the first</>
-        : <><b>{count}</b> of {capacity} steers already reserved</>;
+        : <><b><SteerCount n={reserved} /></b> of {capacity} steers already reserved</>;
 
   return (
     <div className={"tracker" + (compact ? " compact" : "")}>

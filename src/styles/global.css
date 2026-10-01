@@ -1001,7 +1001,7 @@ h3.d { font-size: 1.4rem; }
 .savings-headline .tag { color: var(--brass); display: block; margin-bottom: var(--space-xs); }
 .savings-headline .mute { color: var(--on-dark-mute); }
 .savings-big { font-size: clamp(2.4rem, 5vw, 3.4rem); color: var(--brass); line-height: 1; }
-.savings-strike { font-size: clamp(2rem, 4vw, 2.8rem); line-height: 1; text-decoration: line-through; text-decoration-thickness: 2px; opacity: 0.75; }
+.savings-strike { font-size: clamp(2rem, 4vw, 2.8rem); line-height: 1; opacity: 0.75; }
 
 .savings-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); }
 .savings-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 620px; }
@@ -1264,6 +1264,9 @@ h3.d { font-size: 1.4rem; }
 .tracker .tag { color: var(--rust); display: block; }
 .tracker-count { font-size: clamp(1.35rem, 2.4vw, 1.75rem); line-height: 1.15; margin-top: var(--space-xs); }
 .tracker-count b { color: var(--rust); font-weight: inherit; }
+/* ¼ ½ ¾ sit smaller than the whole number they follow */
+.frac { font-size: 0.62em; vertical-align: 0.28em; margin-left: 0.04em; }
+.site-banner .frac { vertical-align: 0.15em; }
 .tracker-herd { display: grid; gap: clamp(4px, 1vw, 10px); margin-top: var(--space-md); }
 .tracker-herd svg { width: 100%; height: auto; display: block; overflow: visible; }
 .ts-open path { fill: var(--paper-2); stroke: var(--line-strong); stroke-width: 1.6; stroke-linejoin: round; }

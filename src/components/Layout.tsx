@@ -1,6 +1,7 @@
 import { NavLink, Link, Outlet } from "react-router-dom";
 import { RANCH_CONTACT, PROCESSOR, PAYABLE_TO, ASSET, SEASONS, CURRENT_SEASON, NEXT_SEASON } from "../data/config";
-import { useAvailability, seasonFull, steerCount } from "../lib/availability";
+import { useAvailability, seasonFull } from "../lib/availability";
+import SteerCount from "./SteerCount";
 
 export default function Layout() {
   const a = useAvailability();
@@ -14,7 +15,7 @@ export default function Layout() {
         ) : (
           <>
             {season.label.toUpperCase()} HARVEST ·{" "}
-            <b>{a.known && a.reserved > 0 ? `${steerCount(a.reserved)} OF ${a.capacity} STEERS RESERVED` : `${a.capacity} STEERS`}</b>
+            <b>{a.known && a.reserved > 0 ? <><SteerCount n={a.reserved} /> OF {a.capacity} STEERS RESERVED</> : `${a.capacity} STEERS`}</b>
             {" "}· PICKUP {season.pickup.toUpperCase()} AT COLORADO CUSTOM MEAT CO, KERSEY
           </>
         )}
