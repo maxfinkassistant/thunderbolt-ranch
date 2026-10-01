@@ -1266,8 +1266,9 @@ h3.d { font-size: 1.4rem; }
 .tracker-count b { color: var(--rust); font-weight: inherit; }
 .tracker-herd { display: grid; gap: clamp(4px, 1vw, 10px); margin-top: var(--space-md); }
 .tracker-herd svg { width: 100%; height: auto; display: block; overflow: visible; }
-.ts-open path { fill: var(--paper-2); stroke: var(--line-strong); stroke-width: 10; stroke-linejoin: round; }
-.ts-tail { fill: none; stroke: var(--line-strong); stroke-width: 12; stroke-linecap: round; }
+.ts-open path { fill: var(--paper-2); stroke: var(--line-strong); stroke-width: 1.6; stroke-linejoin: round; }
+.ts-tail { fill: none; stroke: var(--line-strong); stroke-width: 1.8; stroke-linecap: round; }
+.ts-tuft { fill: var(--line-strong); }
 .ts-fill { fill: var(--rust); transition: width 0.6s ease; }
 .tracker-note { font-size: 0.9rem; color: var(--ink-2); margin-top: var(--space-md); }
 .tracker-note b { color: var(--ink); }
