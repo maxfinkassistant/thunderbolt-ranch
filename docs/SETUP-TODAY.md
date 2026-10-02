@@ -54,19 +54,33 @@ The site appends `client_reference_id=<order code>` and the customer's email to 
 
 ## Updating the order script (whenever `apps-script/Code.gs` changes)
 
-The 2026-09-30 version adds seasons, the steers-reserved tracker, and steer tracking.
-Until it's deployed the site still works, but the tracker shows no count and the Ranch
-Office's Steers tab is read-only.
+The 2026-10-02 version adds the per-steer price per pound and the final invoice email.
+Until it's deployed the site still works, but: the Steers tab's new **Price per lb**
+field won't save, the **Email invoice** button errors, and a customer's tracking page
+won't show their final total.
 
 1. **https://script.google.com**, signed in as thunderboltbeef@gmail.com → open **Thunderbolt Orders**.
 2. Select everything in `Code.gs`, paste the whole new `apps-script/Code.gs` over it, **Save**.
 3. **Deploy → Manage deployments** → pencil icon on the existing web app → **Version: New version** → **Deploy**.
    (Editing the existing deployment keeps the same `/exec` URL. A *new* deployment would change it.)
 4. Check: open `<your /exec URL>?action=availability` — it should answer with `capacity` and `reserved`.
+5. Check the new bit: in the Ranch Office → Steers, type a price per lb on a steer and
+   **Save**. Reload. If it sticks, the new script is live.
 
-The script adds a **Steers** tab and **Steer** / **Season** columns to the order sheet on
-its own. Every row in the Orders tab counts toward the front-page tracker, so delete the
-test rows first.
+The script adds a **Steers** tab, **Steer** / **Season** columns to the order sheet, and a
+**Price per lb ($)** column to the Steers tab, all on its own. Every row in the Orders tab
+counts toward the front-page tracker, so delete the test rows first.
+
+### Sending a final invoice
+
+1. Ranch Office → **Steers**: put in the steer's hanging weight, and a lower **Price per lb**
+   if the animal came in heavy. Blank = the standard $6.00.
+2. **Harvest roster**: check the total — it should read `<lbs> × <rate>` with a green
+   "rate cut" chip if you discounted it.
+3. **Email invoice** on that row. You'll get a confirmation showing the balance and rate
+   before anything sends. The email is built fresh from the sheet, so what you see in the
+   roster is what the customer gets.
+4. The same numbers appear on the customer's own tracking page automatically — no action needed.
 
 ## Later (not today)
 
