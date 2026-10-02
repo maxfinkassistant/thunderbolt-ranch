@@ -31,11 +31,28 @@ export async function submitOrder(payload: OrderPayload): Promise<{ ok: true; co
   return call(BACKEND_URL, { method: "POST", body: JSON.stringify({ action: "order", ...payload }) });
 }
 
+/** What the customer's own tracking page is allowed to know about the
+    animal behind their order — their numbers only, never the roster. */
+export interface PublicPricing {
+  hangingWeight: number;
+  rate: number;
+  readyDate?: string;
+}
+
 export async function fetchOrder(code: string): Promise<Order | null> {
   const r = await call<{ ok: boolean; order: Order | null }>(
     `${BACKEND_URL}?action=order&code=${encodeURIComponent(code)}`,
   );
   return r.order;
+}
+
+/** The order plus its steer's weight and rate, once it has been
+    weighed. `pricing` is absent on a backend that predates this. */
+export async function fetchTracking(code: string): Promise<{ order: Order | null; pricing?: PublicPricing }> {
+  const r = await call<{ ok: boolean; order: Order | null; pricing?: PublicPricing }>(
+    `${BACKEND_URL}?action=order&code=${encodeURIComponent(code)}`,
+  );
+  return { order: r.order, pricing: r.pricing };
 }
 
 export async function fetchOrders(adminKey: string): Promise<Order[]> {
@@ -75,6 +92,11 @@ export const pushAssignment = (adminKey: string, code: string, patch: { steer?: 
 
 export const pushSettings = (adminKey: string, settings: SeasonSettings) =>
   admin(adminKey, { action: "settings", ...settings });
+
+/** Email one customer their final invoice. The backend recomputes the
+    money from the sheet — the browser never dictates what to bill. */
+export const sendInvoice = (adminKey: string, code: string) =>
+  admin(adminKey, { action: "invoice", code });
 
 /** Public: how much of the current season is spoken for. Null when
     the backend predates steer tracking. */

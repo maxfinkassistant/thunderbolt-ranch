@@ -7,10 +7,10 @@ import {
   RIB_CHOICES, LOIN_CHOICES, RIB_YIELD, RIB_ROAST_LBS,
   TBONE_YIELD, STRIP_YIELD, FILET_YIELD,
   steakCount, roastCount,
-  DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST,
+  DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST, HANGING_TYP, money,
   type ShareId,
 } from "../data/config";
-import { effectiveExtra, type CutSheetAnswers } from "./store";
+import { effectiveExtra, type CutSheetAnswers, type Steer } from "./store";
 
 const inches = (id?: string) =>
   THICKNESS_OPTIONS.find((t) => t.id === id)?.inches ?? 1;
@@ -133,3 +133,72 @@ export function shareCost(share: ShareId): Cost {
 }
 
 export { HANGING_RATE, TAKEHOME_RATE_EST };
+
+/* ============================================================
+   FINAL PRICING
+   Until a steer is weighed, an order is priced off the typical
+   animal (SHARES[...].total). Once it's on the hook the real
+   number is hanging weight × share × the rate for that animal —
+   which may be below standard when the carcass came in heavy.
+
+   Every surface that shows money after the harvest — the order
+   ticket, the invoice email, the customer's tracking page — reads
+   this one function, so they can't drift apart.
+   ============================================================ */
+
+export interface FinalPrice {
+  rate: number;          // $/lb actually charged
+  standardRate: number;  // what it would have been
+  adjusted: boolean;     // rate came in under standard
+  heavy: boolean;        // and the carcass is why
+  hangingLbs: number;    // the whole animal
+  shareLbs: number;      // this customer's portion of it
+  total: number;
+  deposit: number;
+  balance: number;
+  saved: number;         // versus the standard rate, 0 when not adjusted
+}
+
+/** Null until the steer has been weighed — there's no real number
+    before that, only the estimate. */
+export function finalPrice(
+  share: ShareId,
+  steer?: Pick<Steer, "hangingWeight" | "rate"> | null,
+): FinalPrice | null {
+  const hangingLbs = steer?.hangingWeight;
+  if (!hangingLbs || hangingLbs <= 0) return null;
+
+  const standardRate = HANGING_RATE;
+  const rate = steer?.rate && steer.rate > 0 ? steer.rate : standardRate;
+  const shareLbs = Math.round(hangingLbs * SHARES[share].frac);
+  const total = Math.round(shareLbs * rate);
+  const adjusted = rate < standardRate;
+
+  return {
+    rate,
+    standardRate,
+    adjusted,
+    /* only call the weight the reason when the weight actually is one */
+    heavy: adjusted && hangingLbs > HANGING_TYP,
+    hangingLbs,
+    shareLbs,
+    total,
+    deposit: DEPOSIT,
+    balance: total - DEPOSIT,
+    saved: adjusted ? Math.round(shareLbs * (standardRate - rate)) : 0,
+  };
+}
+
+/** The customer-facing explanation for a reduced rate. Null when
+    there's nothing to explain. */
+export function rateNote(p: FinalPrice | null): string | null {
+  if (!p || !p.adjusted) return null;
+  const from = `$${p.standardRate.toFixed(2)}`;
+  const to = `$${p.rate.toFixed(2)}`;
+  return p.heavy
+    ? `Your steer came in at ${p.hangingLbs} lb hanging — heavier than our typical animal. `
+      + `Because of that we've brought your price down from ${from} to ${to} per pound, `
+      + `which saves you ${money(p.saved)} against our standard rate.`
+    : `We've brought your price down from ${from} to ${to} per pound on this animal, `
+      + `which saves you ${money(p.saved)} against our standard rate.`;
+}

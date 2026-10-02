@@ -3,9 +3,9 @@
 
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { SHARES, DEPOSIT, HANGING_RATE, PAYABLE_TO, RANCH_CONTACT, seasonOf, money } from "../data/config";
+import { SHARES, DEPOSIT, HANGING_RATE, PAYABLE_TO, RANCH_CONTACT, seasonOf, money, money2 } from "../data/config";
 import { getOrder, listSteers, type Order, type Steer } from "../lib/store";
-import { boxSummary } from "../lib/estimate";
+import { boxSummary, finalPrice, rateNote } from "../lib/estimate";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
 import { backendConfigured, fetchOrder, fetchOffice } from "../lib/api";
 
@@ -48,10 +48,9 @@ export default function CustomerTicket() {
   const season = seasonOf(order);
   const steer = steers.find((s) => s.id === order.steer);
   /* real money once the steer has been weighed, the estimate until then */
-  const actual = steer?.hangingWeight
-    ? Math.round(steer.hangingWeight * SHARES[order.share].frac * HANGING_RATE)
-    : null;
-  const total = actual ?? SHARES[order.share].total;
+  const price = finalPrice(order.share, steer);
+  const note = rateNote(price);
+  const total = price?.total ?? SHARES[order.share].total;
   const readyOn = steer?.readyDate
     ? new Date(steer.readyDate + "T12:00:00").toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })
     : null;
@@ -105,7 +104,24 @@ export default function CustomerTicket() {
           <div className="ticket-row"><span className="k">Notes</span><span className="v">{order.cutSheet.notes}</span></div>
         )}
         <hr className="ticket-sep" />
-        <div className="ticket-row"><span className="k">Total{actual === null ? " (est.)" : ""}</span><span className="v">{money(total)}</span></div>
+        {price ? (
+          <>
+            <div className="ticket-row">
+              <span className="k">Your share of the hang</span>
+              <span className="v">{price.shareLbs} lb</span>
+            </div>
+            <div className="ticket-row">
+              <span className="k">Price per pound</span>
+              <span className="v">
+                {money2(price.rate)}
+                {price.adjusted && <> · was {money2(price.standardRate)}</>}
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="ticket-row"><span className="k">Price per pound</span><span className="v">{money2(HANGING_RATE)}</span></div>
+        )}
+        <div className="ticket-row"><span className="k">Total{price ? "" : " (est.)"}</span><span className="v">{money(total)}</span></div>
         <div className="ticket-row"><span className="k">Deposit</span><span className="v">{money(DEPOSIT)} · paid to {PAYABLE_TO}</span></div>
         <div className="ticket-total">
           <span>BALANCE AT PICKUP</span>
@@ -113,11 +129,18 @@ export default function CustomerTicket() {
         </div>
       </div>
 
+      {note && (
+        <div className="rate-note">
+          <span className="tag">Why your price per pound went down</span>
+          <p>{note}</p>
+        </div>
+      )}
+
       <p className="small mute" style={{ marginTop: "var(--space-md)" }}>
         Ranch questions: {RANCH_CONTACT.name}, {RANCH_CONTACT.phone}.{" "}
-        {actual === null
+        {price === null
           ? "Balance is estimated on typical weights — final number follows the animal's actual hanging weight."
-          : `Balance is figured on this steer's actual hanging weight at $${HANGING_RATE}/lb.`}
+          : `Balance is figured on this steer's actual hanging weight at ${money2(price.rate)}/lb.`}
       </p>
     </main>
   );

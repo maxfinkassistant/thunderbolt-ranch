@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { SHARES, seasonOf, type ShareId } from "../data/config";
-import { getOrder, listOrders, STATUS_STEPS, statusIndex, type Order } from "../lib/store";
-import { boxSummary } from "../lib/estimate";
+import { SHARES, DEPOSIT, PAYABLE_TO, RANCH_CONTACT, seasonOf, money, money2, type ShareId } from "../data/config";
+import { getOrder, listOrders, listSteers, STATUS_STEPS, statusIndex, type Order } from "../lib/store";
+import { boxSummary, finalPrice, rateNote } from "../lib/estimate";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
-import { backendConfigured, fetchOrder } from "../lib/api";
+import { backendConfigured, fetchTracking, type PublicPricing } from "../lib/api";
 
 export default function Track() {
   const { code } = useParams();
@@ -13,6 +13,7 @@ export default function Track() {
   const [query, setQuery] = useState("");
   const [pdfBusy, setPdfBusy] = useState(false);
   const [order, setOrder] = useState<Order | undefined>(() => (code ? getOrder(code) : undefined));
+  const [pricing, setPricing] = useState<PublicPricing | undefined>();
   const [loading, setLoading] = useState(false);
   const mine = listOrders();
 
@@ -21,11 +22,16 @@ export default function Track() {
     if (!code) return;
     const local = getOrder(code);
     setOrder(local);
+    setPricing(undefined);
     if (!backendConfigured()) return;
     let alive = true;
     setLoading(true);
-    fetchOrder(code)
-      .then((remote) => { if (alive && remote) setOrder(remote); })
+    fetchTracking(code)
+      .then(({ order: remote, pricing: p }) => {
+        if (!alive) return;
+        if (remote) setOrder(remote);
+        if (p) setPricing(p);
+      })
       .catch(() => {})
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -87,6 +93,12 @@ export default function Track() {
   const season = seasonOf(order);
   const idx = statusIndex(order.status);
   const lines = boxSummary(order.cutSheet, viewShare);
+
+  /* the live backend hands back this order's own animal; in local demo
+     mode the steers are right here in the browser */
+  const weighed = pricing ?? (backendConfigured() ? undefined : listSteers().find((s) => s.id === order.steer));
+  const price = finalPrice(viewShare, weighed);
+  const note = rateNote(price);
   const whenFor = (stepId: string): string => {
     switch (stepId) {
       case "reserved": return new Date(order.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -182,6 +194,50 @@ export default function Track() {
           </div>
         </div>
       </div>
+
+      {price && (
+        <div className="owed">
+          <div className="owed-head">
+            <span className="tag">Your final total</span>
+            <span className="small">Figured on your animal's actual hanging weight</span>
+          </div>
+          <div className="owed-rows">
+            <div className="owed-row">
+              <span>Your share of the hang</span>
+              <b>{price.shareLbs} lb</b>
+            </div>
+            <div className="owed-row">
+              <span>Price per pound</span>
+              <b>
+                {money2(price.rate)}
+                {price.adjusted && <s className="owed-was">{money2(price.standardRate)}</s>}
+              </b>
+            </div>
+            <div className="owed-row">
+              <span>Total</span>
+              <b>{money(price.total)}</b>
+            </div>
+            <div className="owed-row">
+              <span>Deposit already paid</span>
+              <b>− {money(price.deposit)}</b>
+            </div>
+            <div className="owed-row total">
+              <span>Balance at pickup</span>
+              <b>{money(price.balance)}</b>
+            </div>
+          </div>
+          {note && (
+            <div className="rate-note on-dark">
+              <span className="tag">Good news on your price</span>
+              <p>{note}</p>
+            </div>
+          )}
+          <p className="owed-fine">
+            Payable to {PAYABLE_TO} when you collect. Questions about any of it — call or text
+            {" "}{RANCH_CONTACT.name} at {RANCH_CONTACT.phone}.
+          </p>
+        </div>
+      )}
     </main>
   );
 }

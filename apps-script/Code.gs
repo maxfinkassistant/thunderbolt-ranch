@@ -41,6 +41,8 @@ const SEASON_COPY = {
 };
 const DEFAULT_CAPACITY = 7;   // steers this season, until the Ranch Office says otherwise
 const SHARE_FRAC = { quarter: 0.25, half: 0.5, whole: 1 };
+const DEPOSIT = 250;          // flat, every share size
+const HANGING_TYP = 900;      // lb, a typical carcass — above this counts as heavy
 
 const SHEET_NAME = "Orders";
 const HEADERS = [
@@ -51,7 +53,8 @@ const HEADERS = [
 const COL_STATUS = 3, COL_STEER = 15, COL_SEASON = 16;
 
 const STEER_SHEET = "Steers";
-const STEER_HEADERS = ["Steer ID", "Season", "Hanging weight (lb)", "Est. ready date"];
+const STEER_HEADERS = ["Steer ID", "Season", "Hanging weight (lb)", "Est. ready date", "Price per lb ($)"];
+const STANDARD_RATE = 6.0;   // $/lb hanging, unless a steer says otherwise
 
 function props_() { return PropertiesService.getScriptProperties(); }
 
@@ -95,8 +98,20 @@ function steerSheet_() {
     /* IDs and dates stay exactly as typed — no "007" → 7, no timezone drift */
     sh.getRange("A:A").setNumberFormat("@");
     sh.getRange("D:D").setNumberFormat("@");
+  } else if (sh.getLastColumn() < STEER_HEADERS.length) {
+    /* a Steers sheet from before per-steer pricing: add the heading */
+    sh.getRange(1, 1, 1, STEER_HEADERS.length).setValues([STEER_HEADERS]).setFontWeight("bold");
   }
   return sh;
+}
+
+/* yyyy-mm-dd → "October 16, 2026" for anything a customer reads. */
+function prettyDate_(ymd) {
+  const parts = String(ymd || "").split("-");
+  if (parts.length !== 3) return String(ymd || "");
+  const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  if (isNaN(d.getTime())) return String(ymd || "");
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), "MMMM d, yyyy");
 }
 
 /* A date cell comes back as a Date; hand the site a plain yyyy-mm-dd. */
@@ -115,6 +130,7 @@ function steers_() {
       const steer = { id: String(r[0]).trim(), season: String(r[1] || CURRENT_SEASON) };
       if (Number(r[2]) > 0) steer.hangingWeight = Number(r[2]);
       if (r[3]) steer.readyDate = dateText_(r[3]);
+      if (Number(r[4]) > 0) steer.rate = Number(r[4]);
       return steer;
     });
 }
@@ -171,7 +187,18 @@ function doGet_(e) {
   if (q.action === "order" && q.code) {
     const code = String(q.code).toUpperCase();
     const row = rows_().find(r => String(r[0]).toUpperCase() === code);
-    return json_({ ok: true, order: row ? orderFromRow_(row) : null });
+    const order = row ? orderFromRow_(row) : null;
+    /* their own animal's weight and rate — never the whole roster */
+    const steer = order ? steerFor_(order) : null;
+    const out = { ok: true, order: order };
+    if (steer && Number(steer.hangingWeight) > 0) {
+      out.pricing = {
+        hangingWeight: Number(steer.hangingWeight),
+        rate: Number(steer.rate) > 0 ? Number(steer.rate) : STANDARD_RATE,
+      };
+      if (steer.readyDate) out.pricing.readyDate = steer.readyDate;
+    }
+    return json_(out);
   }
   if (q.action === "list") {
     if (!isAdmin_(q.key)) return json_({ ok: false, error: "bad key" });
@@ -199,7 +226,7 @@ function doPost_(e) {
   let body;
   try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: "bad json" }); }
 
-  if (["status", "assign", "steer", "steer-delete", "settings"].indexOf(body.action) >= 0) {
+  if (["status", "assign", "steer", "steer-delete", "settings", "invoice"].indexOf(body.action) >= 0) {
     if (!isAdmin_(body.key)) return json_({ ok: false, error: "bad key" });
     return adminPost_(body);
   }
@@ -264,7 +291,13 @@ function adminPost_(body) {
     const sh = steerSheet_();
     const ids = steers_().map(x => x.id);
     if (id !== was && ids.indexOf(id) >= 0) return json_({ ok: false, error: "that steer ID is already used" });
-    const values = [id, SEASON_COPY[st.season] ? st.season : CURRENT_SEASON, Number(st.hangingWeight) > 0 ? Number(st.hangingWeight) : "", st.readyDate || ""];
+    const values = [
+      id,
+      SEASON_COPY[st.season] ? st.season : CURRENT_SEASON,
+      Number(st.hangingWeight) > 0 ? Number(st.hangingWeight) : "",
+      st.readyDate || "",
+      Number(st.rate) > 0 ? Number(st.rate) : "",
+    ];
     const at = steerRow_(was);
     if (at < 0) sh.appendRow(values);
     else sh.getRange(at, 1, 1, STEER_HEADERS.length).setValues([values]);
@@ -278,6 +311,20 @@ function adminPost_(body) {
     if (at < 0) return json_({ ok: false, error: "not found" });
     steerSheet_().deleteRow(at);
     relink_(id, "");
+    return json_({ ok: true });
+  }
+
+  if (body.action === "invoice") {
+    const code = String(body.code || "").toUpperCase();
+    const row = rows_().find(r => String(r[0]).toUpperCase() === code);
+    if (!row) return json_({ ok: false, error: "no order " + code });
+    const order = orderFromRow_(row);
+    const steer = steerFor_(order);
+    const price = priceFor_(order, steer);
+    /* the browser asks; the sheet decides what the bill actually is */
+    if (!price) return json_({ ok: false, error: "that order's steer has no hanging weight yet" });
+    if (!order.email) return json_({ ok: false, error: "that order has no email address" });
+    invoiceCustomer_(order, steer, price);
     return json_({ ok: true });
   }
 
@@ -310,6 +357,51 @@ function relink_(from, to) {
 }
 
 /* ---------------- email ---------------- */
+
+/* The final money for one order, once its steer has a weight. Mirrors
+   finalPrice() in src/lib/estimate.ts — keep the two in step. Returns
+   null while the animal is still unweighed. */
+function priceFor_(order, steer) {
+  if (!steer || !(Number(steer.hangingWeight) > 0)) return null;
+  const hangingLbs = Number(steer.hangingWeight);
+  const rate = Number(steer.rate) > 0 ? Number(steer.rate) : STANDARD_RATE;
+  const shareLbs = Math.round(hangingLbs * (SHARE_FRAC[order.share] || 0));
+  const total = Math.round(shareLbs * rate);
+  const adjusted = rate < STANDARD_RATE;
+  return {
+    rate: rate,
+    standardRate: STANDARD_RATE,
+    adjusted: adjusted,
+    heavy: adjusted && hangingLbs > HANGING_TYP,
+    hangingLbs: hangingLbs,
+    shareLbs: shareLbs,
+    total: total,
+    deposit: DEPOSIT,
+    balance: total - DEPOSIT,
+    saved: adjusted ? Math.round(shareLbs * (STANDARD_RATE - rate)) : 0,
+  };
+}
+
+/* The customer-facing reason for a reduced rate — only claims the
+   carcass weight is why when the carcass actually was heavy. */
+function rateNote_(p) {
+  if (!p || !p.adjusted) return "";
+  const from = "$" + p.standardRate.toFixed(2);
+  const to = "$" + p.rate.toFixed(2);
+  return p.heavy
+    ? "Your steer came in at " + p.hangingLbs + " lb hanging — heavier than our typical animal. "
+      + "Because of that we've brought your price down from " + from + " to " + to + " per pound, "
+      + "which saves you " + money_(p.saved) + " against our standard rate."
+    : "We've brought your price down from " + from + " to " + to + " per pound on this animal, "
+      + "which saves you " + money_(p.saved) + " against our standard rate.";
+}
+
+function steerFor_(order) {
+  if (!order || !order.steer) return null;
+  const all = steers_();
+  for (let i = 0; i < all.length; i++) if (all[i].id === order.steer) return all[i];
+  return null;
+}
 
 function shareLabel_(s) { return { quarter: "Quarter", half: "Half", whole: "Whole" }[s] || s; }
 function seasonCopy_(id) { return SEASON_COPY[id] || SEASON_COPY[CURRENT_SEASON]; }
@@ -373,4 +465,53 @@ function confirmCustomer_(o, summary, cost, depositLink) {
     "— Thunderbolt Ranch · Ranch to Table",
   ].join("\n");
   MailApp.sendEmail({ to: o.email, subject: subject, body: bodyText, name: "Thunderbolt Ranch" });
+}
+
+/* ---------------- the final invoice ----------------
+   Sent by hand from the Ranch Office once a steer's numbers are
+   settled. Everything in it is recomputed here from the sheet. */
+
+function invoiceCustomer_(o, steer, price) {
+  const subject = "Your Thunderbolt Ranch invoice — " + o.code;
+  const season = seasonCopy_(o.season);
+  const note = rateNote_(price);
+  const readyLine = steer.readyDate
+    ? "Ready for pickup: " + prettyDate_(steer.readyDate) + " at Colorado Custom Meat Co, 443 4th Street, Kersey CO."
+    : "Pickup at Colorado Custom Meat Co, 443 4th Street, Kersey CO — we'll confirm the date.";
+
+  const lines = [
+    "Hi " + (o.name || "").split(" ")[0] + ",",
+    "",
+    "Your " + shareLabel_(o.share).toLowerCase() + " beef is cut and weighed, so here's your final invoice.",
+    "",
+    "YOUR ANIMAL",
+    "Steer: " + (o.steer || "—"),
+    "Hanging weight: " + price.hangingLbs + " lb",
+    "Your " + shareLabel_(o.share).toLowerCase() + " share: " + price.shareLbs + " lb hanging",
+    "",
+    "WHAT YOU OWE",
+    price.shareLbs + " lb × $" + price.rate.toFixed(2) + "/lb = " + money_(price.total),
+    "Deposit already paid: −" + money_(price.deposit),
+    "BALANCE DUE AT PICKUP: " + money_(price.balance),
+    "",
+  ];
+
+  if (note) lines.push("GOOD NEWS ON YOUR PRICE", note, "");
+
+  lines.push(
+    readyLine,
+    "Bring coolers — everything comes frozen, vacuum-sealed and labeled.",
+    "Balance is payable to Thunderbolt Ranch LLC. Checks are fine, or ask Josh about card.",
+    "",
+    "Questions on any of this? Call or text Josh — 402-245-8195, or just reply here.",
+    "",
+    "— Thunderbolt Ranch · Ranch to Table",
+  );
+
+  MailApp.sendEmail({
+    to: o.email,
+    subject: subject,
+    body: lines.join("\n"),
+    name: "Thunderbolt Ranch",
+  });
 }

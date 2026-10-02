@@ -119,6 +119,10 @@ export interface Steer {
   season: SeasonId;
   hangingWeight?: number;  // lb, once it's on the hook
   readyDate?: string;      // yyyy-mm-dd, estimated
+  /** $/lb hanging for this animal. Unset = the standard HANGING_RATE.
+      Set below standard when a heavy carcass would otherwise push a
+      customer's bill up more than feels fair. */
+  rate?: number;
 }
 
 /** What the front-page tracker is built from. */

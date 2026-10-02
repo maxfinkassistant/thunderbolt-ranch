@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  SHARES, SEASONS, CURRENT_SEASON, DEPOSIT, HANGING_RATE, seasonOf, money,
+  SHARES, SEASONS, CURRENT_SEASON, DEPOSIT, HANGING_RATE, seasonOf, money, money2,
   type SeasonId,
 } from "../data/config";
 import {
@@ -15,18 +15,20 @@ import {
   type Order, type OrderStatus, type Steer, type SeasonSettings,
 } from "../lib/store";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
+import { finalPrice } from "../lib/estimate";
 import {
   backendConfigured, checkAdminKey, fetchOffice, pushStatus,
-  pushSteer, removeSteer, pushAssignment, pushSettings, type Office,
+  pushSteer, removeSteer, pushAssignment, pushSettings, sendInvoice, type Office,
 } from "../lib/api";
 import { refreshAvailability, steerCount } from "../lib/availability";
 import SteerTracker from "../components/SteerTracker";
 
 type Tab = "roster" | "steers" | "customers";
 
-/** What the order actually costs once its steer has been weighed. */
+/** What the order actually costs once its steer has been weighed —
+    at that animal's rate, which may sit under the standard one. */
 function actualTotal(o: Order, steer?: Steer): number | null {
-  return steer?.hangingWeight ? Math.round(steer.hangingWeight * SHARES[o.share].frac * HANGING_RATE) : null;
+  return finalPrice(o.share, steer)?.total ?? null;
 }
 
 const fmtDate = (iso?: string) =>
@@ -76,25 +78,33 @@ function SteerRow({
   onSave: (next: Steer, originalId?: string) => Promise<void> | void;
   onRemove?: () => void;
 }) {
-  const blank = { id: "", season: CURRENT_SEASON as SeasonId, hangingWeight: "", readyDate: "" };
+  const blank = { id: "", season: CURRENT_SEASON as SeasonId, hangingWeight: "", readyDate: "", rate: "" };
   const from = (s?: Steer) =>
-    s ? { id: s.id, season: s.season, hangingWeight: s.hangingWeight ? String(s.hangingWeight) : "", readyDate: s.readyDate ?? "" } : blank;
+    s ? {
+      id: s.id, season: s.season,
+      hangingWeight: s.hangingWeight ? String(s.hangingWeight) : "",
+      readyDate: s.readyDate ?? "",
+      rate: s.rate ? String(s.rate) : "",
+    } : blank;
   const [d, setD] = useState(() => from(steer));
   const [busy, setBusy] = useState(false);
-  useEffect(() => { setD(from(steer)); }, [steer?.id, steer?.season, steer?.hangingWeight, steer?.readyDate]);
+  useEffect(() => { setD(from(steer)); }, [steer?.id, steer?.season, steer?.hangingWeight, steer?.readyDate, steer?.rate]);
 
   const id = d.id.trim();
   const dirty = JSON.stringify(d) !== JSON.stringify(from(steer));
   const clash = taken.includes(id);
   const weight = d.hangingWeight.trim() === "" ? undefined : Number(d.hangingWeight);
   const weightBad = weight !== undefined && !(weight > 0);
+  const rate = d.rate.trim() === "" ? undefined : Number(d.rate);
+  const rateBad = rate !== undefined && !(rate > 0);
+  const rateCut = rate !== undefined && rate < HANGING_RATE;
   const claimed = linked.reduce((t, o) => t + SHARES[o.share].frac, 0);
   const label = steer ? `steer ${steer.id}` : "new steer";
 
   const save = async () => {
     setBusy(true);
     try {
-      await onSave({ id, season: d.season, hangingWeight: weight, readyDate: d.readyDate || undefined }, steer?.id);
+      await onSave({ id, season: d.season, hangingWeight: weight, readyDate: d.readyDate || undefined, rate }, steer?.id);
       if (!steer) setD(blank);
     } finally {
       setBusy(false);
@@ -120,6 +130,20 @@ function SteerRow({
           onChange={(e) => setD({ ...d, hangingWeight: e.target.value })} />
       </td>
       <td>
+        <input className="admin-input mono" type="number" min="0" step="0.05" inputMode="decimal"
+          value={d.rate} placeholder={HANGING_RATE.toFixed(2)} aria-label={`Price per pound for ${label}`}
+          onChange={(e) => setD({ ...d, rate: e.target.value })} />
+        {rateBad
+          ? <span className="admin-sub" style={{ color: "var(--rust)" }}>Must be above 0</span>
+          : rateCut
+            ? <span className="admin-sub" style={{ color: "var(--sage)" }}>
+                {money2(HANGING_RATE - rate!)}/lb off standard
+              </span>
+            : rate !== undefined && rate > HANGING_RATE
+              ? <span className="admin-sub" style={{ color: "var(--rust)" }}>Above standard</span>
+              : <span className="admin-sub">Blank = standard</span>}
+      </td>
+      <td>
         <input className="admin-input" type="date" value={d.readyDate} aria-label={`Estimated ready date for ${label}`}
           onChange={(e) => setD({ ...d, readyDate: e.target.value })} />
       </td>
@@ -136,7 +160,7 @@ function SteerRow({
         )}
       </td>
       <td style={{ whiteSpace: "nowrap" }}>
-        <button className="btn btn-ghost" disabled={busy || !id || clash || weightBad || !dirty} onClick={save}>
+        <button className="btn btn-ghost" disabled={busy || !id || clash || weightBad || rateBad || !dirty} onClick={save}>
           {busy ? "Saving…" : steer ? "Save" : "Add steer"}
         </button>
         {onRemove && (
@@ -216,6 +240,8 @@ export default function Customers() {
   const [tab, setTab] = useState<Tab>("roster");
   const [tick, setTick] = useState(0);
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
+  const [invoiceBusy, setInvoiceBusy] = useState<string | null>(null);
+  const [invoiceSent, setInvoiceSent] = useState<Record<string, boolean>>({});
   const [remote, setRemote] = useState<Office | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -271,6 +297,29 @@ export default function Customers() {
 
   const storeSettings = (next: SeasonSettings) =>
     commit(() => saveSettings(next), () => pushSettings(adminKey, next), (o) => ({ ...o, settings: next }));
+
+  /* The final invoice goes out from here, not automatically — Josh
+     decides when a steer's numbers are settled enough to bill on. */
+  const emailInvoice = async (o: Order) => {
+    const steer = steers.find((x) => x.id === o.steer);
+    const price = finalPrice(o.share, steer);
+    if (!price) return;
+    const ask = price.adjusted
+      ? `Email ${o.name} their final invoice? ${money(price.balance)} due at ${money2(price.rate)}/lb `
+        + `(down from ${money2(price.standardRate)}), and they'll be told why.`
+      : `Email ${o.name} their final invoice? ${money(price.balance)} due at ${money2(price.rate)}/lb.`;
+    if (!window.confirm(ask)) return;
+    setInvoiceBusy(o.code);
+    setLoadError(null);
+    try {
+      await sendInvoice(adminKey, o.code);
+      setInvoiceSent((m) => ({ ...m, [o.code]: true }));
+    } catch (e) {
+      setLoadError(`Couldn't send ${o.code}'s invoice: ${(e as Error).message}`);
+    } finally {
+      setInvoiceBusy(null);
+    }
+  };
 
   const unlock = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -377,7 +426,8 @@ export default function Customers() {
             <tbody>
               {orders.map((o) => {
                 const steer = steers.find((x) => x.id === o.steer);
-                const actual = actualTotal(o, steer);
+                const price = finalPrice(o.share, steer);
+                const actual = price?.total ?? null;
                 return (
                 <tr key={o.code}>
                   <td className="mono">{o.code}{o.sample && <span className="admin-chip">sample</span>}</td>
@@ -413,8 +463,13 @@ export default function Customers() {
                   <td className="mono">
                     {money(actual ?? SHARES[o.share].total)}
                     <span className="admin-sub">
-                      {actual !== null ? "actual weight" : "estimate"}
+                      {price
+                        ? `${price.shareLbs} lb × ${money2(price.rate)}`
+                        : "estimate"}
                     </span>
+                    {price?.adjusted && (
+                      <span className="admin-chip done">rate cut · saves {money(price.saved)}</span>
+                    )}
                   </td>
                   <td>
                     <select
@@ -426,15 +481,29 @@ export default function Customers() {
                       {STATUS_STEPS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                     </select>
                   </td>
-                  <td style={{ whiteSpace: "nowrap" }}>
+                  <td>
+                    <div className="row-actions">
                     <button
-                      className="small" style={{ textDecoration: "underline", marginRight: 10 }}
+                      className="small" style={{ textDecoration: "underline" }}
                       disabled={pdfBusy === o.code}
                       onClick={async () => { setPdfBusy(o.code); try { await downloadCutSheet(o); } finally { setPdfBusy(null); } }}
                     >
                       {pdfBusy === o.code ? "…" : "CCMC PDF"}
                     </button>
                     <Link className="small" to={`/customers/ticket/${o.code}`}>Ticket</Link>
+                    <button
+                      className="small" style={{ textDecoration: "underline" }}
+                      disabled={!price || !live || invoiceBusy === o.code}
+                      title={
+                        !price ? "Weigh this order's steer first"
+                          : !live ? "Needs the live backend"
+                            : `Email the final invoice to ${o.email}`
+                      }
+                      onClick={() => emailInvoice(o)}
+                    >
+                      {invoiceBusy === o.code ? "Sending…" : invoiceSent[o.code] ? "Invoice sent ✓" : "Email invoice"}
+                    </button>
+                    </div>
                   </td>
                 </tr>
                 );
@@ -448,7 +517,8 @@ export default function Customers() {
             "CCMC PDF" downloads the customer's filled cutting-instructions form, ready to email
             to order@ccmeatco.com. Status changes update the customer's tracking page immediately.
             Link an order to a steer and, once that steer's hanging weight is in, the total
-            switches from the estimate to the real number.
+            switches from the estimate to the real number. "Email invoice" sends the customer
+            that final number — including the lower price per pound, if you set one on the steer.
           </p>
         </div>
       )}
@@ -480,7 +550,7 @@ export default function Customers() {
             <table className="admin-table">
               <thead>
                 <tr>
-                  <th>Steer ID</th><th>Harvest</th><th>Hanging weight</th><th>Est. ready date</th><th>Orders</th><th></th>
+                  <th>Steer ID</th><th>Harvest</th><th>Hanging weight</th><th>Price per lb</th><th>Est. ready date</th><th>Orders</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -495,7 +565,7 @@ export default function Customers() {
                   />
                 ))}
                 {steers.length === 0 && (
-                  <tr><td colSpan={6} className="mute" style={{ textAlign: "center", padding: "var(--space-xl)" }}>
+                  <tr><td colSpan={7} className="mute" style={{ textAlign: "center", padding: "var(--space-xl)" }}>
                     No steers entered yet. Add the first one below.
                   </td></tr>
                 )}
