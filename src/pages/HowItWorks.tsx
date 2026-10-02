@@ -36,7 +36,7 @@ const STEPS = [
   {
     when: SEASON.pickup,
     t: "Pick up in Kersey",
-    b: `Grab coolers and collect your beef at Colorado Custom. Your balance is due to ${PAYABLE_TO} — you pay on your animal's actual hanging weight, so the number is real, not an estimate. ${STORAGE_NOTE}`,
+    b: `Collect your beef at Colorado Custom — frozen, vacuum-sealed, boxed and ready to load. Your balance is due to ${PAYABLE_TO} — you pay on your animal's actual hanging weight, so the number is real, not an estimate. ${STORAGE_NOTE}`,
   },
 ];
 

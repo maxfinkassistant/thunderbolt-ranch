@@ -279,7 +279,7 @@ export const STATUS_STEPS: { id: OrderStatus; label: string; blurb: string }[] =
   { id: "reserved", label: "Reserved", blurb: "Deposit in. Your share is held, and your cut sheet can still be changed until your steer goes to the butcher." },
   { id: "locked", label: "Cut sheet locked", blurb: "Your cutting instructions are with Colorado Custom." },
   { id: "processing", label: "Hanging & processing", blurb: "Your beef is dry aging 14 days, then cut and packaged to your instructions." },
-  { id: "ready", label: "Ready for pickup", blurb: "Pick up at Colorado Custom in Kersey. Bring coolers." },
+  { id: "ready", label: "Ready for pickup", blurb: "Pick up at Colorado Custom in Kersey — frozen, vacuum-sealed and boxed, ready to load." },
   { id: "picked-up", label: "Picked up", blurb: "Enjoy. Tell us how the first ribeye went." },
 ];
 

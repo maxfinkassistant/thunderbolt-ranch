@@ -34,7 +34,7 @@ not a month-long build. Ship the minimum that takes real deposits.*
 
 ## Pickup week (Oct 1)
 - [ ] Email cut sheets to order@ccmeatco.com from /customers (one click per order)
-- [ ] Pickup logistics email: coolers, freezer space, $10/day storage after the grace week
+- [ ] Pickup logistics email: freezer space, vehicle room, $10/day storage after the grace week
 - [ ] Collect balances (checks to Thunderbolt Ranch LLC; Stripe invoice as backup)
 - [ ] Mark orders picked-up in /customers as they clear
 

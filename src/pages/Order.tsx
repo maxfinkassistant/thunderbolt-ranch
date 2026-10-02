@@ -138,7 +138,7 @@ export default function Order() {
             ["Now", `Your ${money(DEPOSIT)} deposit holds your ${SHARES[placed.share].label.toLowerCase()}. You can adjust your cut sheet until your steer goes to the butcher.`],
             [`This ${season.name}`, "Harvest. Your beef dry-ages 14 days at Colorado Custom in Kersey."],
             ["After the hang", "Cut and packaged to your exact cut sheet, vacuum sealed and labeled."],
-            [season.pickup, `Pickup in Kersey — we'll confirm the date. Bring coolers for about ${SHARES[placed.share].takehome} lb. Balance of ${money(SHARES[placed.share].total - DEPOSIT)} due to ${PAYABLE_TO}.`],
+            [season.pickup, `Pickup in Kersey — we'll confirm the date. About ${SHARES[placed.share].takehome} lb, frozen and boxed, so leave room in the vehicle. Balance of ${money(SHARES[placed.share].total - DEPOSIT)} due to ${PAYABLE_TO}.`],
           ].map(([k, v]) => (
             <div className="next-step" key={k}>
               <div className="when">{k}</div>

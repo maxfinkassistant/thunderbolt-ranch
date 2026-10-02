@@ -378,7 +378,7 @@ export default function Landing() {
             <div>
               <span className="tag">Questions?</span>
               <p>Call or text {RANCH_CONTACT.name} — {RANCH_CONTACT.phone}.</p>
-              <p className="dim">Pickup only — everything comes frozen, vacuum-sealed, and labeled. Bring coolers.</p>
+              <p className="dim">Pickup only — everything comes frozen, vacuum-sealed, labeled and boxed. Just leave room in the vehicle.</p>
             </div>
           </div>
         </div>

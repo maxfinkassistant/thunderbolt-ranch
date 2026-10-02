@@ -455,7 +455,7 @@ function confirmCustomer_(o, summary, cost, depositLink) {
     "WHAT HAPPENS NEXT",
     "This " + season.name + " — harvest. Your beef dry-ages 14 days at Colorado Custom Meat Co in Kersey.",
     "After the hang — cut and packaged to your cut sheet (you can adjust it until your steer goes to the butcher — just text Josh).",
-    "Pickup, " + season.pickup + " — at Colorado Custom, 443 4th Street, Kersey CO. We'll confirm the date. Bring coolers.",
+    "Pickup, " + season.pickup + " — at Colorado Custom, 443 4th Street, Kersey CO. We'll confirm the date. It comes out frozen and boxed, so just leave room in the vehicle.",
     "",
     "YOUR CUT SHEET",
     summary,
@@ -500,7 +500,7 @@ function invoiceCustomer_(o, steer, price) {
 
   lines.push(
     readyLine,
-    "Bring coolers — everything comes frozen, vacuum-sealed and labeled.",
+    "Everything comes out frozen, vacuum-sealed, labeled and boxed — just leave room in the vehicle.",
     "Balance is payable to Thunderbolt Ranch LLC. Checks are fine, or ask Josh about card.",
     "",
     "Questions on any of this? Call or text Josh — 402-245-8195, or just reply here.",

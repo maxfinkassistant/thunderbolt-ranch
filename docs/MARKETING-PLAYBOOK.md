@@ -59,7 +59,7 @@
 | Sept 16 | "Harvest day" note to holders + last-call push to fence-sitters (still 2 weeks to order) |
 | Sept 23 | One week left — cut sheets due Sept 30 |
 | Sept 28–30 | Final call (email + text) |
-| Week of Oct 1 | Pickup logistics note (coolers, freezer space, storage-fee reminder) |
+| Week of Oct 1 | Pickup logistics note (freezer space, vehicle room, storage-fee reminder) |
 | Mid-Oct | "How was the first ribeye?" — review ask + next-harvest waitlist |
 
 ## 7. KPIs
