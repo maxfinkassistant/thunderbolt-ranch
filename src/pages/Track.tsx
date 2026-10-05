@@ -217,32 +217,32 @@ export default function Track() {
               </b>
             </div>
             <div className="owed-row">
-              <span>Total</span>
-              <b>{money(price.total)}</b>
-            </div>
-            <div className="owed-row">
-              <span>Deposit already paid</span>
-              <b>− {money(price.deposit)}</b>
-            </div>
-            <div className={"owed-row" + (price.pattyCharge ? "" : " total")}>
-              <span>{price.pattyCharge ? <>Balance to the ranch</> : <>Balance at pickup</>}</span>
-              <b>{money(price.balance)}</b>
+              <span>{price.pattyCharge ? <>Beef</> : <>Total</>}</span>
+              <b>{money(price.beefTotal)}</b>
             </div>
             {price.pattyCharge > 0 && (
               <>
                 <div className="owed-row">
                   <span>
-                    Patties, to Colorado Custom
-                    <span className="owed-sub">{price.pattyLbs} lb × {money2(PATTY_RATE)}/lb · paid to the butcher</span>
+                    Patties
+                    <span className="owed-sub">{price.pattyLbs} lb × {money2(PATTY_RATE)}/lb, the butcher's charge</span>
                   </span>
                   <b>{money(price.pattyCharge)}</b>
                 </div>
-                <div className="owed-row total">
-                  <span>Estimated total at pickup</span>
-                  <b>{money(price.dueAtPickup)}</b>
+                <div className="owed-row">
+                  <span>Total</span>
+                  <b>{money(price.total)}</b>
                 </div>
               </>
             )}
+            <div className="owed-row">
+              <span>Deposit already paid</span>
+              <b>− {money(price.deposit)}</b>
+            </div>
+            <div className="owed-row total">
+              <span>Balance at pickup</span>
+              <b>{money(price.balance)}</b>
+            </div>
           </div>
           {note && (
             <div className="rate-note on-dark">
@@ -251,14 +251,8 @@ export default function Track() {
             </div>
           )}
           <p className="owed-fine">
-            {price.pattyCharge > 0 ? (
-              <>
-                Two payments at pickup: {money(price.balance)} to {PAYABLE_TO}, and the patty
-                charge to Colorado Custom. {PATTY_BILLING_NOTE}{" "}
-              </>
-            ) : (
-              <>Payable to {PAYABLE_TO} when you collect.{" "}</>
-            )}
+            One payment of {money(price.balance)} to {PAYABLE_TO} when you collect.{" "}
+            {price.pattyCharge > 0 && <>{PATTY_BILLING_NOTE}{" "}</>}
             Questions about any of it — call or text {RANCH_CONTACT.name} at {RANCH_CONTACT.phone}.
           </p>
         </div>

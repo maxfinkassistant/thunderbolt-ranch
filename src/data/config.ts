@@ -341,18 +341,17 @@ export const PATTY_MIN_LBS = 30;
     invoice. We still estimate it so nobody is surprised at the counter. */
 export const PATTY_RATE = 0.5;   // $/lb
 export const PATTY_LB_OPTIONS = ["30 lb", "40 lb", "50 lb", "60 lb"];
-/* Patties are the butcher's own service, not ours. Colorado Custom bills
-   the customer for them directly at pickup — the charge never appears on
-   the ranch's invoice, so every surface that mentions patties has to say
-   so plainly or people get a surprise at the counter. */
+/* Pressing patties is the butcher's charge, but it reaches them through
+   us: the customer pays the ranch one balance at pickup and we settle with
+   Colorado Custom. So it belongs on our invoice as a line item, not as a
+   separate bill the customer has to think about. */
 export const PATTY_NOTE =
-  "30 lb minimum. Colorado Custom charges $0.50/lb for pressing patties — you'll settle that "
-  + "with them at pickup, separately from your ranch balance.";
+  "30 lb minimum. Pressing patties adds $0.50/lb, which we add to your balance at pickup.";
 
 /** Shorter version, for the invoice and tracking page. */
 export const PATTY_BILLING_NOTE =
-  "Patties are pressed by Colorado Custom, who bill you for them at pickup — paid to them, "
-  + "not to the ranch. Estimated at their current $0.50/lb.";
+  "The patty charge is the butcher's $0.50/lb for pressing them — we pay Colorado Custom and "
+  + "add it to your balance, so it's all one payment to the ranch.";
 
 export const ORGANS = [
   { id: "liver", label: "Liver", note: "Sliced and frozen flat." },

@@ -43,7 +43,7 @@ const DEFAULT_CAPACITY = 7;   // steers this season, until the Ranch Office says
 const SHARE_FRAC = { quarter: 0.25, half: 0.5, whole: 1 };
 const DEPOSIT = 250;          // flat, every share size
 const HANGING_TYP = 900;      // lb, a typical carcass — above this counts as heavy
-const PATTY_RATE = 0.5;       // $/lb — Colorado Custom's charge, billed by them at pickup
+const PATTY_RATE = 0.5;       // $/lb — the butcher's patty charge, collected by us and passed on
 const PATTY_MIN_LBS = 30;
 
 const SHEET_NAME = "Orders";
@@ -370,9 +370,11 @@ function priceFor_(order, steer) {
   const shareLbs = Math.round(hangingLbs * (SHARE_FRAC[order.share] || 0));
   const total = Math.round(shareLbs * rate);
   const adjusted = rate < STANDARD_RATE;
-  const balance = total - DEPOSIT;
+  /* the patty fee is the butcher's, but it reaches them through us —
+     the customer writes one check, to the ranch */
   const pattyLbs = pattyPounds_(order.cutSheet);
   const pattyCharge = Math.round(pattyLbs * PATTY_RATE);
+  const billTotal = total + pattyCharge;
   return {
     rate: rate,
     standardRate: STANDARD_RATE,
@@ -380,13 +382,13 @@ function priceFor_(order, steer) {
     heavy: adjusted && hangingLbs > HANGING_TYP,
     hangingLbs: hangingLbs,
     shareLbs: shareLbs,
-    total: total,
-    deposit: DEPOSIT,
-    balance: balance,
-    saved: adjusted ? Math.round(shareLbs * (STANDARD_RATE - rate)) : 0,
+    beefTotal: total,
     pattyLbs: pattyLbs,
     pattyCharge: pattyCharge,
-    dueAtPickup: balance + pattyCharge,
+    total: billTotal,
+    deposit: DEPOSIT,
+    balance: billTotal - DEPOSIT,
+    saved: adjusted ? Math.round(shareLbs * (STANDARD_RATE - rate)) : 0,
   };
 }
 
@@ -505,22 +507,24 @@ function invoiceCustomer_(o, steer, price) {
     "Your " + shareLabel_(o.share).toLowerCase() + " share: " + price.shareLbs + " lb hanging",
     "",
     "WHAT YOU OWE",
-    price.shareLbs + " lb × $" + price.rate.toFixed(2) + "/lb = " + money_(price.total),
-    "Deposit already paid: −" + money_(price.deposit),
-    (price.pattyCharge > 0 ? "Balance to Thunderbolt Ranch: " : "BALANCE DUE AT PICKUP: ") + money_(price.balance),
-    "",
+    "Beef: " + price.shareLbs + " lb × $" + price.rate.toFixed(2) + "/lb = " + money_(price.beefTotal),
   ];
 
   if (price.pattyCharge > 0) {
     lines.push(
-      "Plus, paid to the butcher at pickup:",
-      price.pattyLbs + " lb pressed into patties × $" + PATTY_RATE.toFixed(2) + "/lb = " + money_(price.pattyCharge),
-      "(Colorado Custom's charge, not ours — you settle it with them.)",
-      "",
-      "ESTIMATED TOTAL AT PICKUP: " + money_(price.dueAtPickup),
-      "",
+      "Patties: " + price.pattyLbs + " lb × $" + PATTY_RATE.toFixed(2) + "/lb = " + money_(price.pattyCharge)
+        + "  (the butcher's charge for pressing them, which we pay and add here)",
+      "Total: " + money_(price.total),
     );
   }
+
+  lines.push(
+    "Deposit already paid: −" + money_(price.deposit),
+    "BALANCE DUE AT PICKUP: " + money_(price.balance),
+    "",
+    "That's one payment, to Thunderbolt Ranch LLC — nothing to settle with the butcher.",
+    "",
+  );
 
   if (note) lines.push("GOOD NEWS ON YOUR PRICE", note, "");
 

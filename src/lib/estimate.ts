@@ -153,13 +153,13 @@ export interface FinalPrice {
   heavy: boolean;        // and the carcass is why
   hangingLbs: number;    // the whole animal
   shareLbs: number;      // this customer's portion of it
-  total: number;
-  deposit: number;
-  balance: number;       // owed to the ranch
-  saved: number;         // versus the standard rate, 0 when not adjusted
+  beefTotal: number;     // shareLbs × rate
   pattyLbs: number;      // 0 when they didn't ask for patties
-  pattyCharge: number;   // owed to the butcher, not the ranch
-  dueAtPickup: number;   // balance + pattyCharge — the real out-of-pocket
+  pattyCharge: number;   // the butcher's patty fee, which we collect and pass on
+  total: number;         // beefTotal + pattyCharge — the whole bill
+  deposit: number;
+  balance: number;       // what they hand over at pickup, all to the ranch
+  saved: number;         // versus the standard rate, 0 when not adjusted
 }
 
 /** Pounds of ground going to patties, from the cut sheet's "40 lb". */
@@ -185,9 +185,11 @@ export function finalPrice(
   const total = Math.round(shareLbs * rate);
   const adjusted = rate < standardRate;
 
-  const balance = total - DEPOSIT;
+  /* The patty fee is the butcher's, but it reaches them through us —
+     the customer writes one check, to the ranch. */
   const pattyLbs = pattyPounds(cutSheet);
   const pattyCharge = Math.round(pattyLbs * PATTY_RATE);
+  const billTotal = total + pattyCharge;
 
   return {
     rate,
@@ -197,13 +199,13 @@ export function finalPrice(
     heavy: adjusted && hangingLbs > HANGING_TYP,
     hangingLbs,
     shareLbs,
-    total,
-    deposit: DEPOSIT,
-    balance,
-    saved: adjusted ? Math.round(shareLbs * (standardRate - rate)) : 0,
+    beefTotal: total,
     pattyLbs,
     pattyCharge,
-    dueAtPickup: balance + pattyCharge,
+    total: billTotal,
+    deposit: DEPOSIT,
+    balance: billTotal - DEPOSIT,
+    saved: adjusted ? Math.round(shareLbs * (standardRate - rate)) : 0,
   };
 }
 

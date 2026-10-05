@@ -124,29 +124,24 @@ export default function CustomerTicket() {
         ) : (
           <div className="ticket-row"><span className="k">Price per pound</span><span className="v">{money2(HANGING_RATE)}</span></div>
         )}
-        <div className="ticket-row"><span className="k">Total{price ? "" : " (est.)"}</span><span className="v">{money(total)}</span></div>
-        <div className="ticket-row"><span className="k">Deposit</span><span className="v">{money(DEPOSIT)} · paid to {PAYABLE_TO}</span></div>
-        {price && price.pattyCharge > 0 ? (
+        {price && price.pattyCharge > 0 && (
           <>
             <div className="ticket-row">
-              <span className="k">Balance to the ranch</span>
-              <span className="v">{money(price.balance)}</span>
+              <span className="k">Beef</span>
+              <span className="v">{money(price.beefTotal)}</span>
             </div>
             <div className="ticket-row">
-              <span className="k">Patties · {price.pattyLbs} lb × {money2(PATTY_RATE)} · to CCMC</span>
+              <span className="k">Patties · {price.pattyLbs} lb × {money2(PATTY_RATE)}</span>
               <span className="v">{money(price.pattyCharge)}</span>
             </div>
-            <div className="ticket-total">
-              <span>EST. TOTAL AT PICKUP</span>
-              <span className="v">{money(price.dueAtPickup)}</span>
-            </div>
           </>
-        ) : (
-          <div className="ticket-total">
-            <span>BALANCE AT PICKUP</span>
-            <span className="v">{money(total - DEPOSIT)}</span>
-          </div>
         )}
+        <div className="ticket-row"><span className="k">Total{price ? "" : " (est.)"}</span><span className="v">{money(total)}</span></div>
+        <div className="ticket-row"><span className="k">Deposit</span><span className="v">{money(DEPOSIT)} · paid to {PAYABLE_TO}</span></div>
+        <div className="ticket-total">
+          <span>BALANCE AT PICKUP</span>
+          <span className="v">{money(total - DEPOSIT)}</span>
+        </div>
       </div>
 
       {price && price.pattyCharge > 0 && (
