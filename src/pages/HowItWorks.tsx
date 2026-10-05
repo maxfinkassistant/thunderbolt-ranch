@@ -110,7 +110,8 @@ export default function HowItWorks() {
                 Roughly {money(savingsFor("quarter").totals.saved)} on a quarter
                 and {money(savingsFor("whole").totals.saved)} on a whole, measured against what the
                 same cuts cost on the shelf. One price — {money2(TAKEHOME_RATE_EST)}/lb take-home —
-                covers ribeyes and burger alike, with no processing fees tacked on at the end.
+                covers ribeyes and burger alike, with cutting and wrapping included rather than
+                billed on at the end.
               </p>
             </div>
             <div className="three">

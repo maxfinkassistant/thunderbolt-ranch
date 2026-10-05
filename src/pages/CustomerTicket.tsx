@@ -3,7 +3,10 @@
 
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { SHARES, DEPOSIT, HANGING_RATE, PAYABLE_TO, RANCH_CONTACT, seasonOf, money, money2 } from "../data/config";
+import {
+  SHARES, DEPOSIT, HANGING_RATE, PAYABLE_TO, RANCH_CONTACT, PATTY_RATE, PATTY_BILLING_NOTE,
+  seasonOf, money, money2,
+} from "../data/config";
 import { getOrder, listSteers, type Order, type Steer } from "../lib/store";
 import { boxSummary, finalPrice, rateNote } from "../lib/estimate";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
@@ -48,7 +51,7 @@ export default function CustomerTicket() {
   const season = seasonOf(order);
   const steer = steers.find((s) => s.id === order.steer);
   /* real money once the steer has been weighed, the estimate until then */
-  const price = finalPrice(order.share, steer);
+  const price = finalPrice(order.share, steer, order.cutSheet);
   const note = rateNote(price);
   const total = price?.total ?? SHARES[order.share].total;
   const readyOn = steer?.readyDate
@@ -123,11 +126,34 @@ export default function CustomerTicket() {
         )}
         <div className="ticket-row"><span className="k">Total{price ? "" : " (est.)"}</span><span className="v">{money(total)}</span></div>
         <div className="ticket-row"><span className="k">Deposit</span><span className="v">{money(DEPOSIT)} · paid to {PAYABLE_TO}</span></div>
-        <div className="ticket-total">
-          <span>BALANCE AT PICKUP</span>
-          <span className="v">{money(total - DEPOSIT)}</span>
-        </div>
+        {price && price.pattyCharge > 0 ? (
+          <>
+            <div className="ticket-row">
+              <span className="k">Balance to the ranch</span>
+              <span className="v">{money(price.balance)}</span>
+            </div>
+            <div className="ticket-row">
+              <span className="k">Patties · {price.pattyLbs} lb × {money2(PATTY_RATE)} · to CCMC</span>
+              <span className="v">{money(price.pattyCharge)}</span>
+            </div>
+            <div className="ticket-total">
+              <span>EST. TOTAL AT PICKUP</span>
+              <span className="v">{money(price.dueAtPickup)}</span>
+            </div>
+          </>
+        ) : (
+          <div className="ticket-total">
+            <span>BALANCE AT PICKUP</span>
+            <span className="v">{money(total - DEPOSIT)}</span>
+          </div>
+        )}
       </div>
+
+      {price && price.pattyCharge > 0 && (
+        <p className="small mute" style={{ marginTop: "var(--space-sm)" }}>
+          {PATTY_BILLING_NOTE}
+        </p>
+      )}
 
       {note && (
         <div className="rate-note">

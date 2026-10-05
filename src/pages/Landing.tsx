@@ -102,8 +102,8 @@ export default function Landing() {
               ≈ {money2(TAKEHOME_RATE_EST)}/lb
             </div>
             <p className="dim">
-              Take-home estimate at {money2(HANGING_RATE)}/lb hanging weight. No processing
-              fees, no hidden costs.
+              Take-home estimate at {money2(HANGING_RATE)}/lb hanging weight. Cutting, wrapping
+              and freezing are all included — no processing fees on top.
             </p>
           </div>
           <div>

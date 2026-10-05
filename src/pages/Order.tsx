@@ -287,8 +287,9 @@ export default function Order() {
                 <b>{money(cost.total)}</b>
               </div>
               <p className="pay-fine">
-                No processing fees, no hidden costs — about {money2(TAKEHOME_RATE_EST)}/lb in your
-                freezer. Checks payable to {PAYABLE_TO}. Pickup at {PROCESSOR.name}, Kersey.
+                Cutting, wrapping and freezing are included — about {money2(TAKEHOME_RATE_EST)}/lb in
+                your freezer, with no processing fees on top. Checks payable to {PAYABLE_TO}.
+                Pickup at {PROCESSOR.name}, Kersey.
               </p>
             </div>
 

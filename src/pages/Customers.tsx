@@ -28,7 +28,7 @@ type Tab = "roster" | "steers" | "customers";
 /** What the order actually costs once its steer has been weighed —
     at that animal's rate, which may sit under the standard one. */
 function actualTotal(o: Order, steer?: Steer): number | null {
-  return finalPrice(o.share, steer)?.total ?? null;
+  return finalPrice(o.share, steer, o.cutSheet)?.total ?? null;
 }
 
 const fmtDate = (iso?: string) =>
@@ -302,7 +302,7 @@ export default function Customers() {
      decides when a steer's numbers are settled enough to bill on. */
   const emailInvoice = async (o: Order) => {
     const steer = steers.find((x) => x.id === o.steer);
-    const price = finalPrice(o.share, steer);
+    const price = finalPrice(o.share, steer, o.cutSheet);
     if (!price) return;
     const ask = price.adjusted
       ? `Email ${o.name} their final invoice? ${money(price.balance)} due at ${money2(price.rate)}/lb `
@@ -426,7 +426,7 @@ export default function Customers() {
             <tbody>
               {orders.map((o) => {
                 const steer = steers.find((x) => x.id === o.steer);
-                const price = finalPrice(o.share, steer);
+                const price = finalPrice(o.share, steer, o.cutSheet);
                 const actual = price?.total ?? null;
                 return (
                 <tr key={o.code}>

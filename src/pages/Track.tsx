@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { SHARES, DEPOSIT, PAYABLE_TO, RANCH_CONTACT, seasonOf, money, money2, type ShareId } from "../data/config";
+import {
+  SHARES, DEPOSIT, PAYABLE_TO, RANCH_CONTACT, PATTY_RATE, PATTY_BILLING_NOTE,
+  seasonOf, money, money2, type ShareId,
+} from "../data/config";
 import { getOrder, listOrders, listSteers, STATUS_STEPS, statusIndex, type Order } from "../lib/store";
 import { boxSummary, finalPrice, rateNote } from "../lib/estimate";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
@@ -97,7 +100,7 @@ export default function Track() {
   /* the live backend hands back this order's own animal; in local demo
      mode the steers are right here in the browser */
   const weighed = pricing ?? (backendConfigured() ? undefined : listSteers().find((s) => s.id === order.steer));
-  const price = finalPrice(viewShare, weighed);
+  const price = finalPrice(viewShare, weighed, order.cutSheet);
   const note = rateNote(price);
   const whenFor = (stepId: string): string => {
     switch (stepId) {
@@ -221,10 +224,25 @@ export default function Track() {
               <span>Deposit already paid</span>
               <b>− {money(price.deposit)}</b>
             </div>
-            <div className="owed-row total">
-              <span>Balance at pickup</span>
+            <div className={"owed-row" + (price.pattyCharge ? "" : " total")}>
+              <span>{price.pattyCharge ? <>Balance to the ranch</> : <>Balance at pickup</>}</span>
               <b>{money(price.balance)}</b>
             </div>
+            {price.pattyCharge > 0 && (
+              <>
+                <div className="owed-row">
+                  <span>
+                    Patties, to Colorado Custom
+                    <span className="owed-sub">{price.pattyLbs} lb × {money2(PATTY_RATE)}/lb · paid to the butcher</span>
+                  </span>
+                  <b>{money(price.pattyCharge)}</b>
+                </div>
+                <div className="owed-row total">
+                  <span>Estimated total at pickup</span>
+                  <b>{money(price.dueAtPickup)}</b>
+                </div>
+              </>
+            )}
           </div>
           {note && (
             <div className="rate-note on-dark">
@@ -233,8 +251,15 @@ export default function Track() {
             </div>
           )}
           <p className="owed-fine">
-            Payable to {PAYABLE_TO} when you collect. Questions about any of it — call or text
-            {" "}{RANCH_CONTACT.name} at {RANCH_CONTACT.phone}.
+            {price.pattyCharge > 0 ? (
+              <>
+                Two payments at pickup: {money(price.balance)} to {PAYABLE_TO}, and the patty
+                charge to Colorado Custom. {PATTY_BILLING_NOTE}{" "}
+              </>
+            ) : (
+              <>Payable to {PAYABLE_TO} when you collect.{" "}</>
+            )}
+            Questions about any of it — call or text {RANCH_CONTACT.name} at {RANCH_CONTACT.phone}.
           </p>
         </div>
       )}

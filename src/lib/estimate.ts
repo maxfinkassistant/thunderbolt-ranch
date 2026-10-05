@@ -7,7 +7,7 @@ import {
   RIB_CHOICES, LOIN_CHOICES, RIB_YIELD, RIB_ROAST_LBS,
   TBONE_YIELD, STRIP_YIELD, FILET_YIELD,
   steakCount, roastCount,
-  DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST, HANGING_TYP, money,
+  DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST, HANGING_TYP, PATTY_RATE, PATTY_MIN_LBS, money,
   type ShareId,
 } from "../data/config";
 import { effectiveExtra, type CutSheetAnswers, type Steer } from "./store";
@@ -155,8 +155,18 @@ export interface FinalPrice {
   shareLbs: number;      // this customer's portion of it
   total: number;
   deposit: number;
-  balance: number;
+  balance: number;       // owed to the ranch
   saved: number;         // versus the standard rate, 0 when not adjusted
+  pattyLbs: number;      // 0 when they didn't ask for patties
+  pattyCharge: number;   // owed to the butcher, not the ranch
+  dueAtPickup: number;   // balance + pattyCharge — the real out-of-pocket
+}
+
+/** Pounds of ground going to patties, from the cut sheet's "40 lb". */
+function pattyPounds(a?: CutSheetAnswers | null): number {
+  if (!a?.patties) return 0;
+  const lbs = parseInt(a.pattyLbs ?? "", 10);
+  return Number.isFinite(lbs) && lbs > 0 ? lbs : PATTY_MIN_LBS;
 }
 
 /** Null until the steer has been weighed — there's no real number
@@ -164,6 +174,7 @@ export interface FinalPrice {
 export function finalPrice(
   share: ShareId,
   steer?: Pick<Steer, "hangingWeight" | "rate"> | null,
+  cutSheet?: CutSheetAnswers | null,
 ): FinalPrice | null {
   const hangingLbs = steer?.hangingWeight;
   if (!hangingLbs || hangingLbs <= 0) return null;
@@ -173,6 +184,10 @@ export function finalPrice(
   const shareLbs = Math.round(hangingLbs * SHARES[share].frac);
   const total = Math.round(shareLbs * rate);
   const adjusted = rate < standardRate;
+
+  const balance = total - DEPOSIT;
+  const pattyLbs = pattyPounds(cutSheet);
+  const pattyCharge = Math.round(pattyLbs * PATTY_RATE);
 
   return {
     rate,
@@ -184,8 +199,11 @@ export function finalPrice(
     shareLbs,
     total,
     deposit: DEPOSIT,
-    balance: total - DEPOSIT,
+    balance,
     saved: adjusted ? Math.round(shareLbs * (standardRate - rate)) : 0,
+    pattyLbs,
+    pattyCharge,
+    dueAtPickup: balance + pattyCharge,
   };
 }
 
