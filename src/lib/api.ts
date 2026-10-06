@@ -95,10 +95,38 @@ export const pushAssignment = (adminKey: string, code: string, patch: { steer?: 
 export const pushSettings = (adminKey: string, settings: SeasonSettings) =>
   admin(adminKey, { action: "settings", ...settings });
 
-/** Email one customer their final invoice. The backend recomputes the
-    money from the sheet — the browser never dictates what to bill. */
-export const sendInvoice = (adminKey: string, code: string) =>
-  admin(adminKey, { action: "invoice", code });
+/** Email one customer their final invoice: the filled cut sheet (built
+    here, attached there), a Stripe link for the exact balance, and the
+    confirm button. The backend recomputes the money from the sheet —
+    the browser never dictates what to bill. */
+export const sendInvoice = (adminKey: string, code: string, pdfBase64: string) =>
+  call<{ ok: true; payUrl?: string; warning?: string }>(BACKEND_URL, {
+    method: "POST", body: JSON.stringify({ key: adminKey, action: "invoice", code, pdf: pdfBase64 }),
+  });
+
+/* ---------------- customer confirmation (token-gated, public) ---------------- */
+
+export interface ConfirmView {
+  order: Order;
+  pricing?: PublicPricing;
+  payUrl?: string;
+  butcherPhone: string;
+  paid: boolean;
+}
+
+/** What the "looks good & I've paid" page is allowed to see — only
+    with the token that was in the customer's own email. */
+export async function fetchConfirm(code: string, token: string): Promise<ConfirmView> {
+  const r = await call<{ ok: boolean } & ConfirmView>(
+    `${BACKEND_URL}?action=confirm&code=${encodeURIComponent(code)}&t=${encodeURIComponent(token)}`,
+  );
+  return { order: r.order, pricing: r.pricing, payUrl: r.payUrl, butcherPhone: r.butcherPhone, paid: !!r.paid };
+}
+
+export const submitConfirm = (code: string, token: string, name: string, pdfBase64: string) =>
+  call<{ ok: true; paid: boolean; sentToButcher: boolean }>(BACKEND_URL, {
+    method: "POST", body: JSON.stringify({ action: "sign", code, t: token, name, pdf: pdfBase64 }),
+  });
 
 /** Public: how much of the current season is spoken for. Null when
     the backend predates steer tracking. */

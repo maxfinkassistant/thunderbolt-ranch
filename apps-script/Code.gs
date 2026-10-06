@@ -51,8 +51,20 @@ const HEADERS = [
   "Code", "Created", "Status", "Name", "Email", "Phone", "Address",
   "Share", "Total", "Deposit", "Balance", "Summary", "Notes", "Order JSON",
   "Steer", "Season",
+  "Invoiced at", "Pay link id", "Pay link URL", "Confirm token",
+  "Signed by", "Signed at", "Paid at", "Butcher sent at",
 ];
 const COL_STATUS = 3, COL_STEER = 15, COL_SEASON = 16;
+/* final-invoice workflow columns (1-based) */
+const COL_INVOICED = 17, COL_PLINK_ID = 18, COL_PLINK_URL = 19, COL_TOKEN = 20,
+      COL_SIGNED_BY = 21, COL_SIGNED_AT = 22, COL_PAID_AT = 23, COL_BUTCHER_AT = 24;
+
+const SITE_URL = "https://thunderboltbeef.com";
+const RANCH_INBOX = "thunderboltbeef@gmail.com";
+const BUTCHER_PHONE = "970-356-2333";
+/* Script property BUTCHER_EMAIL overrides this — point it at yourself
+   for a dry run before the first real sheet goes to Colorado Custom. */
+function butcherEmail_() { return String(props_().getProperty("BUTCHER_EMAIL") || "order@ccmeatco.com").trim(); }
 
 const STEER_SHEET = "Steers";
 const STEER_HEADERS = ["Steer ID", "Season", "Hanging weight (lb)", "Est. ready date", "Price per lb ($)", "Kill date"];
@@ -174,6 +186,11 @@ function orderFromRow_(r) {
     o.steer = String(r[14] || "").trim() || undefined;
     /* orders from before seasons existed belong to the current one */
     o.season = String(r[15] || "") || o.season || CURRENT_SEASON;
+    if (r[16]) o.invoicedAt = dateText_(r[16]);
+    if (r[20]) o.signedBy = String(r[20]);
+    if (r[21]) o.signedAt = dateText_(r[21]);
+    if (r[22]) o.paidAt = dateText_(r[22]);
+    if (r[23]) o.butcherSentAt = dateText_(r[23]);
     return o;
   } catch (e) {
     return null;
@@ -193,18 +210,23 @@ function doGet_(e) {
     const row = rows_().find(r => String(r[0]).toUpperCase() === code);
     const order = row ? orderFromRow_(row) : null;
     /* their own animal's weight and rate — never the whole roster */
-    const steer = order ? steerFor_(order) : null;
     const out = { ok: true, order: order };
-    if (steer && Number(steer.hangingWeight) > 0) {
-      out.pricing = {
-        hangingWeight: Number(steer.hangingWeight),
-        rate: Number(steer.rate) > 0 ? Number(steer.rate) : STANDARD_RATE,
-      };
-      if (steer.readyDate) out.pricing.readyDate = steer.readyDate;
-      /* enough for the customer's own cut-sheet PDF header, nothing more */
-      out.pricing.steerId = steer.id;
-      if (steer.killDate) out.pricing.killDate = steer.killDate;
-    }
+    const pricing = order ? publicPricing_(steerFor_(order)) : null;
+    if (pricing) out.pricing = pricing;
+    return json_(out);
+  }
+  if (q.action === "confirm" && q.code) {
+    /* the page behind the "looks good & I've paid" button — only with
+       the token that was in that customer's own email */
+    const code = String(q.code).toUpperCase();
+    const row = rows_().find(r => String(r[0]).toUpperCase() === code);
+    if (!row) return json_({ ok: false, error: "no order " + code });
+    if (!tokenOk_(row, q.t)) return json_({ ok: false, error: "that link isn't valid — open it from your invoice email" });
+    const order = orderFromRow_(row);
+    const out = { ok: true, order: order, butcherPhone: BUTCHER_PHONE, paid: !!row[22] };
+    const pricing = publicPricing_(steerFor_(order));
+    if (pricing) out.pricing = pricing;
+    if (row[18]) out.payUrl = String(row[18]);
     return json_(out);
   }
   if (q.action === "list") {
@@ -324,16 +346,83 @@ function adminPost_(body) {
 
   if (body.action === "invoice") {
     const code = String(body.code || "").toUpperCase();
-    const row = rows_().find(r => String(r[0]).toUpperCase() === code);
-    if (!row) return json_({ ok: false, error: "no order " + code });
+    const at = orderRow_(code);
+    if (at < 0) return json_({ ok: false, error: "no order " + code });
+    const sh = sheet_();
+    const row = sh.getRange(at, 1, 1, HEADERS.length).getValues()[0];
     const order = orderFromRow_(row);
     const steer = steerFor_(order);
     const price = priceFor_(order, steer);
     /* the browser asks; the sheet decides what the bill actually is */
     if (!price) return json_({ ok: false, error: "that order's steer has no hanging weight yet" });
     if (!order.email) return json_({ ok: false, error: "that order has no email address" });
-    invoiceCustomer_(order, steer, price);
-    return json_({ ok: true });
+
+    const token = String(row[19] || "") || newToken_();
+    const confirmUrl = SITE_URL + "/#/confirm/" + code + "?t=" + token;
+
+    /* a fresh Stripe link for exactly this balance; retire the old one so
+       a stale amount can't be paid */
+    let payUrl = "", plinkId = "", warning = "";
+    if (stripeKey_()) {
+      try {
+        if (row[17]) deactivatePayLink_(String(row[17]));
+        const link = createPayLink_(order, price, token);
+        payUrl = link.url; plinkId = link.id;
+      } catch (err) {
+        warning = "Invoice sent without a card link — " + (err && err.message || err);
+      }
+    } else {
+      warning = "Invoice sent without a card link: STRIPE_SECRET_KEY isn't set in Script Properties.";
+    }
+
+    sh.getRange(at, COL_INVOICED).setValue(new Date().toISOString());
+    sh.getRange(at, COL_PLINK_ID).setValue(plinkId);
+    sh.getRange(at, COL_PLINK_URL).setValue(payUrl);
+    sh.getRange(at, COL_TOKEN).setNumberFormat("@").setValue(token);
+
+    const pdf = body.pdf ? pdfBlob_(body.pdf, code) : null;
+    invoiceCustomer_(order, steer, price, { payUrl: payUrl, confirmUrl: confirmUrl, pdf: pdf });
+    const out = { ok: true, payUrl: payUrl };
+    if (warning) out.warning = warning;
+    return json_(out);
+  }
+
+  if (body.action === "sign") {
+    /* public, token-gated: the customer signed and says they've paid */
+    const code = String(body.code || "").toUpperCase();
+    const at = orderRow_(code);
+    if (at < 0) return json_({ ok: false, error: "no order " + code });
+    const sh = sheet_();
+    const row = sh.getRange(at, 1, 1, HEADERS.length).getValues()[0];
+    if (!tokenOk_(row, body.t)) return json_({ ok: false, error: "that link isn't valid" });
+    const name = String(body.name || "").trim();
+    if (!name) return json_({ ok: false, error: "name required" });
+    if (!body.pdf) return json_({ ok: false, error: "signed sheet missing" });
+    const order = orderFromRow_(row);
+    const steer = steerFor_(order);
+    const price = priceFor_(order, steer);
+    const now = new Date();
+
+    sh.getRange(at, COL_SIGNED_BY).setValue(name);
+    sh.getRange(at, COL_SIGNED_AT).setValue(now.toISOString());
+
+    /* Stripe is the judge of "paid", not the checkbox */
+    let paid = !!row[22];
+    if (!paid && row[17]) {
+      try { paid = payLinkPaid_(String(row[17])); } catch (err) { paid = false; }
+      if (paid) sh.getRange(at, COL_PAID_AT).setValue(now.toISOString());
+    }
+
+    const pdf = pdfBlob_(body.pdf, code, "signed");
+    const alreadySent = !!row[23];
+    let sentToButcher = false;
+    if (paid && !alreadySent) {
+      sendToButcher_(order, steer, price, pdf, name, now);
+      sh.getRange(at, COL_BUTCHER_AT).setValue(now.toISOString());
+      sentToButcher = true;
+    }
+    notifyRanchSigned_(order, price, pdf, name, now, paid, sentToButcher || alreadySent);
+    return json_({ ok: true, paid: paid, sentToButcher: sentToButcher || alreadySent });
   }
 
   if (body.action === "settings") {
@@ -492,62 +581,214 @@ function confirmCustomer_(o, summary, cost, depositLink) {
 
 /* ---------------- the final invoice ----------------
    Sent by hand from the Ranch Office once a steer's numbers are
-   settled. Everything in it is recomputed here from the sheet. */
+   settled. Everything in it is recomputed here from the sheet. The
+   customer gets the filled cut sheet, a card link for the exact
+   balance, the butcher's number, and a button to sign off. */
 
-function invoiceCustomer_(o, steer, price) {
+function publicPricing_(steer) {
+  if (!steer || !(Number(steer.hangingWeight) > 0)) return null;
+  const p = { hangingWeight: Number(steer.hangingWeight), rate: Number(steer.rate) > 0 ? Number(steer.rate) : STANDARD_RATE, steerId: steer.id };
+  if (steer.readyDate) p.readyDate = steer.readyDate;
+  if (steer.killDate) p.killDate = steer.killDate;
+  return p;
+}
+
+function orderRow_(code) {
+  const sh = sheet_();
+  const last = sh.getLastRow();
+  if (last < 2) return -1;
+  const codes = sh.getRange(2, 1, last - 1, 1).getValues();
+  for (let i = 0; i < codes.length; i++) if (String(codes[i][0]).toUpperCase() === code) return i + 2;
+  return -1;
+}
+
+function newToken_() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  let t = "";
+  for (let i = 0; i < 24; i++) t += chars.charAt(Math.floor(Math.random() * chars.length));
+  return t;
+}
+function tokenOk_(row, t) {
+  const want = String(row[19] || "");
+  return want.length >= 16 && String(t || "") === want;
+}
+
+function pdfBlob_(b64, code, tag) {
+  return Utilities.newBlob(Utilities.base64Decode(String(b64)), "application/pdf",
+    "CCMC-cut-sheet-" + code + (tag ? "-" + tag : "") + ".pdf");
+}
+
+/* ---- Stripe, via the REST API. The secret key lives only in Script
+   Properties (STRIPE_SECRET_KEY) and only this file ever sees it. ---- */
+
+function stripeKey_() { return String(props_().getProperty("STRIPE_SECRET_KEY") || "").trim(); }
+
+function stripe_(method, path, params) {
+  const opts = { method: method, headers: { Authorization: "Bearer " + stripeKey_() }, muteHttpExceptions: true };
+  if (params) { opts.payload = params; opts.contentType = "application/x-www-form-urlencoded"; }
+  const res = UrlFetchApp.fetch("https://api.stripe.com/v1" + path, opts);
+  const body = JSON.parse(res.getContentText() || "{}");
+  if (res.getResponseCode() >= 300) throw new Error("Stripe: " + ((body.error && body.error.message) || res.getResponseCode()));
+  return body;
+}
+
+/* A one-off Payment Link for exactly this balance. Payment Links don't
+   expire the way Checkout Sessions do, so the email stays good. */
+function createPayLink_(order, price, token) {
+  const priceObj = stripe_("post", "/prices", {
+    unit_amount: String(Math.round(price.balance * 100)),
+    currency: "usd",
+    "product_data[name]": "Thunderbolt Ranch — balance on order " + order.code + " (" + shareLabel_(order.share) + " beef)",
+  });
+  const link = stripe_("post", "/payment_links", {
+    "line_items[0][price]": priceObj.id,
+    "line_items[0][quantity]": "1",
+    "metadata[order]": order.code,
+    "after_completion[type]": "redirect",
+    "after_completion[redirect][url]": SITE_URL + "/#/confirm/" + order.code + "?t=" + token + "&paid=1",
+  });
+  return {
+    id: link.id,
+    url: link.url + "?client_reference_id=" + encodeURIComponent(order.code) + "&prefilled_email=" + encodeURIComponent(order.email),
+  };
+}
+
+function deactivatePayLink_(id) {
+  try { stripe_("post", "/payment_links/" + id, { active: "false" }); } catch (err) { /* already gone — fine */ }
+}
+
+/* Has anyone completed a checkout on this link? */
+function payLinkPaid_(id) {
+  if (!stripeKey_()) return false;
+  const r = stripe_("get", "/checkout/sessions?payment_link=" + encodeURIComponent(id) + "&limit=20");
+  return (r.data || []).some(s => s.payment_status === "paid");
+}
+
+/* ---- the emails ---- */
+
+function moneyLines_(o, price) {
+  const lines = ["Beef: " + price.shareLbs + " lb × $" + price.rate.toFixed(2) + "/lb = " + money_(price.beefTotal)];
+  if (price.pattyCharge > 0) {
+    lines.push("Patties: " + price.pattyLbs + " lb × $" + PATTY_RATE.toFixed(2) + "/lb = " + money_(price.pattyCharge) + "  (the butcher's charge for pressing them, which we pay and add here)");
+    lines.push("Total: " + money_(price.total));
+  }
+  lines.push("Deposit already paid: −" + money_(price.deposit));
+  lines.push("BALANCE DUE: " + money_(price.balance));
+  return lines;
+}
+
+function esc_(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+function invoiceCustomer_(o, steer, price, opts) {
+  const first = (o.name || "").split(" ")[0];
   const subject = "Your Thunderbolt Ranch invoice — " + o.code;
-  const season = seasonCopy_(o.season);
   const note = rateNote_(price);
   const readyLine = steer.readyDate
     ? "Ready for pickup: " + prettyDate_(steer.readyDate) + " at Colorado Custom Meat Co, 443 4th Street, Kersey CO."
     : "Pickup at Colorado Custom Meat Co, 443 4th Street, Kersey CO — we'll confirm the date.";
+  const payText = opts.payUrl
+    ? "Pay by card here: " + opts.payUrl
+    : "Pay by check to Thunderbolt Ranch LLC at pickup, or call Josh to pay by card.";
 
-  const lines = [
-    "Hi " + (o.name || "").split(" ")[0] + ",",
+  const text = [
+    "Hi " + first + ",",
     "",
-    "Your " + shareLabel_(o.share).toLowerCase() + " beef is cut and weighed, so here's your final invoice.",
+    "Your " + shareLabel_(o.share).toLowerCase() + " beef is cut and weighed. Three things, in order:",
+    "",
+    "1. REVIEW YOUR CUT SHEET — it's attached. Reply to this email with any changes before you sign.",
+    "2. PAY YOUR BALANCE — " + payText,
+    "3. SIGN OFF — once you've paid and the sheet is right, confirm here: " + opts.confirmUrl,
+    "   That sends your signed cut sheet to the butcher.",
+    "",
+    "QUESTIONS ABOUT CUTS?  Colorado Custom Meat Co — " + BUTCHER_PHONE,
+    "Questions about your order or the bill: Josh, 402-245-8195.",
     "",
     "YOUR ANIMAL",
-    "Steer: " + (o.steer || "—"),
-    "Hanging weight: " + price.hangingLbs + " lb",
-    "Your " + shareLabel_(o.share).toLowerCase() + " share: " + price.shareLbs + " lb hanging",
+    "Steer: " + (o.steer || "—") + "   Hanging weight: " + price.hangingLbs + " lb   Your share: " + price.shareLbs + " lb",
     "",
     "WHAT YOU OWE",
-    "Beef: " + price.shareLbs + " lb × $" + price.rate.toFixed(2) + "/lb = " + money_(price.beefTotal),
-  ];
-
-  if (price.pattyCharge > 0) {
-    lines.push(
-      "Patties: " + price.pattyLbs + " lb × $" + PATTY_RATE.toFixed(2) + "/lb = " + money_(price.pattyCharge)
-        + "  (the butcher's charge for pressing them, which we pay and add here)",
-      "Total: " + money_(price.total),
-    );
-  }
-
-  lines.push(
-    "Deposit already paid: −" + money_(price.deposit),
-    "BALANCE DUE AT PICKUP: " + money_(price.balance),
+  ].concat(moneyLines_(o, price)).concat([
     "",
     "That's one payment, to Thunderbolt Ranch LLC — nothing to settle with the butcher.",
-    "",
-  );
+  ]);
+  if (note) text.push("", "GOOD NEWS ON YOUR PRICE", note);
+  text.push("", readyLine, "Everything comes out frozen, vacuum-sealed, labeled and boxed — just leave room in the vehicle.", "", "— Thunderbolt Ranch · Ranch to Table");
 
-  if (note) lines.push("GOOD NEWS ON YOUR PRICE", note, "");
+  const btn = (url, label, bg) => '<a href="' + url + '" style="display:inline-block;padding:13px 22px;background:' + bg + ';color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-family:Helvetica,Arial,sans-serif">' + label + '</a>';
+  const html = [
+    '<div style="font-family:Georgia,serif;color:#2b2521;max-width:620px;margin:0 auto;line-height:1.55">',
+    '<p>Hi ' + esc_(first) + ',</p>',
+    '<p>Your ' + esc_(shareLabel_(o.share).toLowerCase()) + ' beef is cut and weighed. Three things, in order:</p>',
+    '<ol style="padding-left:20px">',
+    '<li style="margin-bottom:14px"><b>Review your cut sheet</b> — it\'s attached. Reply to this email with any changes <i>before</i> you sign.</li>',
+    '<li style="margin-bottom:14px"><b>Pay your balance of ' + money_(price.balance) + '.</b><br>' +
+      (opts.payUrl ? '<div style="margin:10px 0">' + btn(opts.payUrl, 'Pay ' + money_(price.balance) + ' by card', '#7a3b22') + '</div>'
+                   : 'By check to Thunderbolt Ranch LLC at pickup, or call Josh to pay by card.') + '</li>',
+    '<li><b>Sign off.</b> Once you\'ve paid and the sheet is right:<br><div style="margin:10px 0">' + btn(opts.confirmUrl, 'Everything looks good & I\'ve paid', '#2b2521') + '</div><span style="font-size:13px;color:#666">That sends your signed cut sheet to the butcher.</span></li>',
+    '</ol>',
+    '<div style="margin:22px 0;padding:16px 18px;background:#f3ecd8;border-left:4px solid #b08d45;font-family:Helvetica,Arial,sans-serif">',
+    '<div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#7a6333">Questions about cuts?</div>',
+    '<div style="font-size:20px;margin-top:4px"><b>Colorado Custom Meat Co — <a href="tel:' + BUTCHER_PHONE + '" style="color:#2b2521">' + BUTCHER_PHONE + '</a></b></div>',
+    '<div style="font-size:13px;color:#555;margin-top:4px">Questions about your order or the bill: Josh, 402-245-8195.</div>',
+    '</div>',
+    '<table style="border-collapse:collapse;font-family:Helvetica,Arial,sans-serif;font-size:14px;width:100%">',
+    '<tr><td style="padding:6px 0;color:#666">Steer ' + esc_(o.steer || '—') + ' · ' + price.hangingLbs + ' lb hanging · your share ' + price.shareLbs + ' lb</td><td></td></tr>',
+    '<tr><td style="padding:6px 0">Beef — ' + price.shareLbs + ' lb × $' + price.rate.toFixed(2) + '/lb</td><td style="text-align:right">' + money_(price.beefTotal) + '</td></tr>',
+    price.pattyCharge > 0 ? '<tr><td style="padding:6px 0">Patties — ' + price.pattyLbs + ' lb × $' + PATTY_RATE.toFixed(2) + '/lb (the butcher\'s charge, which we pay and add here)</td><td style="text-align:right">' + money_(price.pattyCharge) + '</td></tr>' : '',
+    '<tr><td style="padding:6px 0">Deposit already paid</td><td style="text-align:right">−' + money_(price.deposit) + '</td></tr>',
+    '<tr style="font-weight:700;border-top:2px solid #2b2521"><td style="padding:10px 0">Balance due</td><td style="text-align:right;padding:10px 0">' + money_(price.balance) + '</td></tr>',
+    '</table>',
+    '<p style="font-size:13px;color:#555">One payment, to Thunderbolt Ranch LLC — nothing to settle with the butcher.</p>',
+    note ? '<p style="padding:12px 16px;background:#e9efe4;border-left:4px solid #5b7a4e"><b>Good news on your price.</b> ' + esc_(note) + '</p>' : '',
+    '<p>' + esc_(readyLine) + '<br>Everything comes out frozen, vacuum-sealed, labeled and boxed — just leave room in the vehicle.</p>',
+    '<p style="color:#666">— Thunderbolt Ranch · Ranch to Table</p>',
+    '</div>',
+  ].join("");
 
-  lines.push(
-    readyLine,
-    "Everything comes out frozen, vacuum-sealed, labeled and boxed — just leave room in the vehicle.",
-    "Balance is payable to Thunderbolt Ranch LLC. Checks are fine, or ask Josh about card.",
-    "",
-    "Questions on any of this? Call or text Josh — 402-245-8195, or just reply here.",
-    "",
-    "— Thunderbolt Ranch · Ranch to Table",
-  );
+  const msg = { to: o.email, subject: subject, body: text.join("\n"), htmlBody: html, name: "Thunderbolt Ranch", replyTo: RANCH_INBOX };
+  if (opts.pdf) msg.attachments = [opts.pdf];
+  MailApp.sendEmail(msg);
+}
 
+function notifyRanchSigned_(o, price, pdf, name, when, paid, toButcher) {
+  const status = paid
+    ? (toButcher ? "Paid in Stripe. Signed sheet sent to " + butcherEmail_() + "." : "Paid in Stripe.")
+    : "NO PAYMENT FOUND in Stripe yet. Sheet NOT sent to the butcher — check Stripe, then forward the attached sheet yourself.";
   MailApp.sendEmail({
-    to: o.email,
-    subject: subject,
-    body: lines.join("\n"),
+    to: RANCH_INBOX,
+    subject: (paid ? "✓ " : "⚠ ") + "Signed cut sheet — " + o.code + " · " + o.name,
+    body: [
+      o.name + " signed off on order " + o.code + " (" + shareLabel_(o.share) + " beef).",
+      "Signed as: " + name + " · " + when.toLocaleString(),
+      price ? "Balance: " + money_(price.balance) : "",
+      "",
+      status,
+      "",
+      "Ranch Office: " + SITE_URL + "/#/customers",
+    ].join("\n"),
+    attachments: [pdf],
+  });
+}
+
+function sendToButcher_(o, steer, price, pdf, name, when) {
+  MailApp.sendEmail({
+    to: butcherEmail_(),
+    cc: RANCH_INBOX,
+    subject: "Cut sheet — " + o.name + " · " + shareLabel_(o.share) + " beef · steer " + (o.steer || "—") + " · Thunderbolt Ranch",
+    body: [
+      "Attached: signed cutting instructions for " + o.name + ".",
+      "",
+      "Steer / tag: " + (o.steer || "—"),
+      "Kill date: " + (steer && steer.killDate ? prettyDate_(steer.killDate) : "—"),
+      "Hanging weight: " + (price ? price.hangingLbs + " lb" : "—"),
+      "Share: " + shareLabel_(o.share),
+      "Customer: " + o.name + " · " + o.phone + " · " + o.email,
+      "Signed by customer: " + name + ", " + when.toLocaleDateString(),
+      "",
+      "Questions — Josh, Thunderbolt Ranch, 402-245-8195.",
+    ].join("\n"),
     name: "Thunderbolt Ranch",
+    replyTo: RANCH_INBOX,
+    attachments: [pdf],
   });
 }

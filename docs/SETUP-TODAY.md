@@ -71,19 +71,40 @@ The script adds a **Steers** tab, **Steer** / **Season** columns to the order sh
 **Price per lb ($)** column to the Steers tab, all on its own. Every row in the Orders tab
 counts toward the front-page tracker, so delete the test rows first.
 
-### Sending a final invoice
+### One-time: Stripe for invoices (≈2 min)
 
-1. Ranch Office → **Steers**: put in the steer's hanging weight, and a lower **Price per lb**
+The invoice email carries a card link for the customer's exact balance, and the
+"I've paid" button checks Stripe before anything goes to the butcher. Both need a
+Stripe **secret** key in the script — never in the site.
+
+1. Stripe dashboard → **Developers → API keys** → copy the **Secret key** (`sk_live_…`).
+   Use `sk_test_…` first if you want a dry run.
+2. Apps Script editor → **Project Settings (gear) → Script Properties → Add**:
+   - `STRIPE_SECRET_KEY` = the key
+   - `BUTCHER_EMAIL` = **your own address** for the first run, then change it to
+     `order@ccmeatco.com` (leave it unset and it defaults to Colorado Custom).
+3. Redeploy (Manage deployments → pencil → New version → Deploy).
+
+Nothing in the site bundle ever sees the key; only `Code.gs` reads it.
+
+### Sending a final invoice — and what happens after
+
+1. Ranch Office → **Steers**: hanging weight, kill date, and a lower **Price per lb**
    if the animal came in heavy. Blank = the standard $6.00.
-2. **Harvest roster**: check the total — it should read `<lbs> × <rate>` with a green
-   "rate cut" chip if you discounted it.
-3. **Email invoice** on that row. You'll get a confirmation showing the balance and rate
-   before anything sends. The email is built fresh from the sheet, so what you see in the
-   roster is what the customer gets.
-4. The same numbers appear on the customer's own tracking page automatically — no action needed.
+2. **Harvest roster** → **Email invoice** on the order. You'll see the balance and rate
+   in a confirmation before anything sends.
+3. The customer gets: the filled cut sheet attached, a **Pay by card** button for the
+   exact balance, Colorado Custom's phone number up top, and an
+   **"Everything looks good & I've paid"** button.
+4. They reply with any changes (lands in thunderboltbeef@), pay, then tap the button,
+   type their name as a signature, and submit.
+5. The script writes their name and timestamp onto the form's signature line and
+   emails the signed sheet to thunderboltbeef@. Then it asks Stripe whether that
+   link was paid:
+   - **Paid** → the signed sheet goes to Colorado Custom automatically (cc you).
+   - **Not paid** → it stays with you, subject marked ⚠. Check Stripe, then forward
+     the attached sheet yourself.
+6. The roster shows where each order is: *invoiced · signed · paid · sent to CCMC*.
 
-## Later (not today)
-
-- thunderbolt-ranch.com forwards to thunderboltbeef.com (Squarespace → Domain forwarding)
-- Stripe webhook to auto-mark deposits paid on the sheet (today: glance at Stripe, then set status in Ranch Office)
-- Move off Apps Script to Supabase + Resend if volume ever warrants it — the client code is already shaped for it
+Re-sending an invoice issues a fresh Stripe link for the current balance and retires
+the old one, so a stale amount can't be paid.

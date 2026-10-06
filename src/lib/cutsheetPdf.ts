@@ -229,3 +229,36 @@ export async function downloadCutSheet(order: Order, steer?: Steer | null) {
   link.click();
   URL.revokeObjectURL(url);
 }
+
+
+/* ---------------- e-signature ----------------
+   The CCMC form has a real "CUSTOMER SIGNATURE" field. pdf-lib can't
+   sign it cryptographically, and nobody needs that — a typed name and a
+   timestamp drawn on the line is a valid e-signature for a cut sheet.  */
+
+export async function stampSignature(bytes: Uint8Array, name: string, when: Date): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(bytes);
+  const font = await doc.embedFont(StandardFonts.HelveticaOblique);
+  const small = await doc.embedFont(StandardFonts.Helvetica);
+  const page = doc.getPages()[0];
+  let x = 60, y = 40, w = 300;
+  try {
+    const rect = doc.getForm().getSignature("CUSTOMER SIGNATURE").acroField.getWidgets()[0].getRectangle();
+    x = rect.x + 4; y = rect.y + 4; w = rect.width;
+  } catch { /* field missing — fall back to the page foot */ }
+  const stamp = `e-signed ${when.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} ${when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  page.drawText(name, { x, y: y + 7, size: Math.min(13, w / Math.max(8, name.length) * 1.6), font, color: rgb(0.1, 0.1, 0.35) });
+  page.drawText(stamp, { x, y, size: 6.5, font: small, color: rgb(0.4, 0.4, 0.4) });
+  return doc.save();
+}
+
+export async function buildSignedCutSheet(order: Order, steer: Steer | null | undefined, name: string, when = new Date()): Promise<Uint8Array> {
+  return stampSignature(await buildFilledCutSheet(order, steer), name, when);
+}
+
+/** For posting a PDF to the Apps Script as a text body. */
+export function bytesToBase64(bytes: Uint8Array): string {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}

@@ -14,7 +14,7 @@ import {
   DEFAULT_SETTINGS,
   type Order, type OrderStatus, type Steer, type SeasonSettings,
 } from "../lib/store";
-import { downloadCutSheet, buildFilledCutSheet } from "../lib/cutsheetPdf";
+import { downloadCutSheet, buildFilledCutSheet, bytesToBase64 } from "../lib/cutsheetPdf";
 import { finalPrice } from "../lib/estimate";
 import {
   backendConfigured, checkAdminKey, fetchOffice, pushStatus,
@@ -351,8 +351,12 @@ export default function Customers() {
     setInvoiceBusy(o.code);
     setLoadError(null);
     try {
-      await sendInvoice(adminKey, o.code);
+      /* the filled sheet rides along as the attachment */
+      const pdf = bytesToBase64(await buildFilledCutSheet(o, steer));
+      const r = await sendInvoice(adminKey, o.code, pdf);
       setInvoiceSent((m) => ({ ...m, [o.code]: true }));
+      if (r.warning) setLoadError(r.warning);
+      setTick((t) => t + 1);
     } catch (e) {
       setLoadError(`Couldn't send ${o.code}'s invoice: ${(e as Error).message}`);
     } finally {
@@ -551,8 +555,17 @@ export default function Customers() {
                       }
                       onClick={() => emailInvoice(o)}
                     >
-                      {invoiceBusy === o.code ? "Sending…" : invoiceSent[o.code] ? "Invoice sent ✓" : "Email invoice"}
+                      {invoiceBusy === o.code ? "Sending…" : (invoiceSent[o.code] || o.invoicedAt) ? "Re-send invoice" : "Email invoice"}
                     </button>
+                    {(o.invoicedAt || o.signedAt) && (
+                      <span className="flow-chips">
+                        {o.invoicedAt && <span className="admin-chip">invoiced {fmtDate(o.invoicedAt)}</span>}
+                        {o.signedAt && <span className="admin-chip done">signed · {o.signedBy}</span>}
+                        {o.paidAt && <span className="admin-chip done">paid</span>}
+                        {o.signedAt && !o.paidAt && <span className="admin-chip hot">no payment found</span>}
+                        {o.butcherSentAt && <span className="admin-chip done">sent to CCMC</span>}
+                      </span>
+                    )}
                     </div>
                   </td>
                 </tr>

@@ -8,6 +8,7 @@ import Order from "./pages/Order";
 import Track from "./pages/Track";
 import Customers from "./pages/Customers";
 import CustomerTicket from "./pages/CustomerTicket";
+import Confirm from "./pages/Confirm";
 import "./styles/global.css";
 
 function Root() {
@@ -28,6 +29,7 @@ const routes = [
       { path: "/order", element: <Order /> },
       { path: "/track", element: <Track /> },
       { path: "/track/:code", element: <Track /> },
+      { path: "/confirm/:code", element: <Confirm /> },
       { path: "/customers", element: <Customers /> },
       { path: "/customers/ticket/:code", element: <CustomerTicket /> },
     ],

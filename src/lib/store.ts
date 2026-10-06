@@ -110,6 +110,12 @@ export interface Order {
   season?: SeasonId;       // which harvest it's reserved from; absent = current
   steer?: string;          // Steer.id, once the ranch links it
   sample?: boolean;
+  /* final-invoice workflow — stamped by the order system, read-only here */
+  invoicedAt?: string;
+  signedBy?: string;
+  signedAt?: string;
+  paidAt?: string;
+  butcherSentAt?: string;
 }
 
 /* ---------------- steers + season (back office) ---------------- */
