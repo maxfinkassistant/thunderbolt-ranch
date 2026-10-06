@@ -40,7 +40,7 @@ export default function Layout() {
       <footer className="site-footer">
         <div>THUNDERBOLT RANCH · CALL OR TEXT {RANCH_CONTACT.name.toUpperCase()} {RANCH_CONTACT.phone} · {RANCH_CONTACT.email.toUpperCase()}</div>
         <div>PICKUP: {PROCESSOR.name.toUpperCase()} · {PROCESSOR.address.toUpperCase()}</div>
-        <div>CHECKS PAYABLE TO {PAYABLE_TO.toUpperCase()}</div>
+        <div>BALANCE INVOICED ONCE WEIGHED · PAID ONLINE TO {PAYABLE_TO.toUpperCase()}</div>
         <div><Link to="/customers">RANCH OFFICE</Link></div>
       </footer>
     </>

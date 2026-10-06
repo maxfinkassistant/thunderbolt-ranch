@@ -88,7 +88,7 @@ export default function Landing() {
             <sup>*</sup>Close estimates from a typical {LIVE_TYP.toLocaleString()} lb animal — yours
             may run somewhat above or below. You pay {money2(HANGING_RATE)}/lb on your animal's
             actual hanging weight, so the final number is real. {money(DEPOSIT)} of the total is
-            your deposit; the rest is due at pickup.
+            your deposit; the rest is invoiced once your beef is weighed.
           </p>
         </div>
       </section>
@@ -261,7 +261,7 @@ export default function Landing() {
             <h2 className="d">Pricing &amp; deposits</h2>
             <p>
               {money2(HANGING_RATE)}/lb hanging weight, every share size. {money(DEPOSIT)} deposit
-              holds your beef and applies to your total; the balance is due at pickup. Every
+              holds your beef and applies to your total; the balance is invoiced once your beef is weighed, paid by bank or card from the link. Every
               figure marked <sup>*</sup> is an estimate for a typical animal.
             </p>
           </div>
@@ -281,7 +281,7 @@ export default function Landing() {
                 </Link>
                 <div className="share-price">
                   <span className="mute small">{money(DEPOSIT)} deposit</span>
-                  <strong>{money(balanceAtPickup(s))} at pickup<sup>*</sup></strong>
+                  <strong>{money(balanceAtPickup(s))} balance<sup>*</sup></strong>
                 </div>
               </div>
             ))}
@@ -373,7 +373,7 @@ export default function Landing() {
                 are not who you pay. Your {money(DEPOSIT)} deposit and final balance are paid
                 directly to {PAYABLE_TO}.
               </p>
-              <p className="dim">Checks payable to {PAYABLE_TO}.</p>
+              <p className="dim">Deposit and balance are both paid online — bank (no fee) or card.</p>
             </div>
             <div>
               <span className="tag">Questions?</span>

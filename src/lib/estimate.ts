@@ -158,7 +158,7 @@ export interface FinalPrice {
   pattyCharge: number;   // the butcher's patty fee, which we collect and pass on
   total: number;         // beefTotal + pattyCharge — the whole bill
   deposit: number;
-  balance: number;       // what they hand over at pickup, all to the ranch
+  balance: number;       // what's left after the deposit — invoiced, paid online before pickup
   saved: number;         // versus the standard rate, 0 when not adjusted
 }
 

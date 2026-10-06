@@ -138,7 +138,8 @@ export default function Order() {
             ["Now", `Your ${money(DEPOSIT)} deposit holds your ${SHARES[placed.share].label.toLowerCase()}. You can adjust your cut sheet until your steer goes to the butcher.`],
             [`This ${season.name}`, "Harvest. Your beef dry-ages 14 days at Colorado Custom in Kersey."],
             ["After the hang", "Cut and packaged to your exact cut sheet, vacuum sealed and labeled."],
-            [season.pickup, `Pickup in Kersey — we'll confirm the date. About ${SHARES[placed.share].takehome} lb, frozen and boxed, so leave room in the vehicle. Balance of ${money(SHARES[placed.share].total - DEPOSIT)} due to ${PAYABLE_TO}.`],
+            ["Once weighed", "You'll get an invoice email with your filled-out cut sheet and your exact balance. Pay it by bank (no fee) or card from the link, then sign off — that sends your cut sheet to the butcher."],
+            [season.pickup, `Pickup in Kersey — we'll confirm the date. About ${SHARES[placed.share].takehome} lb, frozen and boxed, so leave room in the vehicle. Your balance will already be invoiced and paid by then.`],
           ].map(([k, v]) => (
             <div className="next-step" key={k}>
               <div className="when">{k}</div>
@@ -182,7 +183,7 @@ export default function Order() {
           <p>
             One price for every share: {money2(HANGING_RATE)}/lb hanging weight —
             about {money2(TAKEHOME_RATE_EST)}/lb in your freezer. {money(DEPOSIT)} deposit
-            holds it, balance due at pickup.
+            holds it; the balance is invoiced once your beef is weighed.
           </p>
         </div>
 
@@ -207,7 +208,7 @@ export default function Order() {
                 <p className="share-feeds">Feeds {s.feeds}.</p>
                 <div className="share-price">
                   <span className="small" style={{ opacity: 0.75 }}>{money(DEPOSIT)} deposit</span>
-                  <strong>{money(s.total - DEPOSIT)} at pickup<sup>*</sup></strong>
+                  <strong>{money(s.total - DEPOSIT)} balance<sup>*</sup></strong>
                 </div>
               </button>
             );
@@ -279,7 +280,7 @@ export default function Order() {
                 <b>{money(cost.deposit)}</b>
               </div>
               <div className="pay-row">
-                <span>Balance at pickup<span className="sub">{cost.hangingLbs} lb hanging × {money2(HANGING_RATE)}/lb − deposit</span></span>
+                <span>Balance, invoiced once weighed<span className="sub">{cost.hangingLbs} lb hanging × {money2(HANGING_RATE)}/lb − deposit</span></span>
                 <b>{money(cost.balance)}</b>
               </div>
               <div className="pay-row total">
@@ -288,7 +289,7 @@ export default function Order() {
               </div>
               <p className="pay-fine">
                 Cutting, wrapping and freezing are included — about {money2(TAKEHOME_RATE_EST)}/lb in
-                your freezer, with no processing fees on top. Checks payable to {PAYABLE_TO}.
+                your freezer, with no processing fees on top. Once your beef is weighed you'll get an invoice with a link to pay by bank or card.
                 Pickup at {PROCESSOR.name}, Kersey.
               </p>
             </div>

@@ -34,9 +34,14 @@ const STEPS = [
     b: "Your beef dry-ages for two weeks — the old-fashioned tenderizing step most store beef never gets. Then it's cut to your sheet, vacuum-sealed, and labeled.",
   },
   {
+    when: "After the hang",
+    t: "Your invoice",
+    b: "Once your animal is weighed you get an email with your filled-out cut sheet and your exact balance. Review it, pay by bank (no fee) or card from the link, and sign off — that sends your cut sheet to the butcher.",
+  },
+  {
     when: SEASON.pickup,
     t: "Pick up in Kersey",
-    b: `Collect your beef at Colorado Custom — frozen, vacuum-sealed, boxed and ready to load. Your balance is due to ${PAYABLE_TO} — you pay on your animal's actual hanging weight, so the number is real, not an estimate. ${STORAGE_NOTE}`,
+    b: `Collect your beef at Colorado Custom — frozen, vacuum-sealed, boxed and ready to load. Your balance was invoiced and paid before this, figured on your animal's actual hanging weight, so the number is real, not an estimate. ${STORAGE_NOTE}`,
   },
 ];
 

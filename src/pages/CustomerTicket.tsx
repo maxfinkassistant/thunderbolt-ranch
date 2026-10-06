@@ -139,7 +139,7 @@ export default function CustomerTicket() {
         <div className="ticket-row"><span className="k">Total{price ? "" : " (est.)"}</span><span className="v">{money(total)}</span></div>
         <div className="ticket-row"><span className="k">Deposit</span><span className="v">{money(DEPOSIT)} · paid to {PAYABLE_TO}</span></div>
         <div className="ticket-total">
-          <span>BALANCE AT PICKUP</span>
+          <span>BALANCE DUE</span>
           <span className="v">{money(total - DEPOSIT)}</span>
         </div>
       </div>

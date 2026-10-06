@@ -240,7 +240,7 @@ export default function Track() {
               <b>− {money(price.deposit)}</b>
             </div>
             <div className="owed-row total">
-              <span>Balance at pickup</span>
+              <span>Balance due</span>
               <b>{money(price.balance)}</b>
             </div>
           </div>
@@ -251,7 +251,7 @@ export default function Track() {
             </div>
           )}
           <p className="owed-fine">
-            One payment of {money(price.balance)} to {PAYABLE_TO} when you collect.{" "}
+            One payment of {money(price.balance)} to {PAYABLE_TO} — pay it from the link in your invoice email, by bank (no fee) or card, before pickup.{" "}
             {price.pattyCharge > 0 && <>{PATTY_BILLING_NOTE}{" "}</>}
             Questions about any of it — call or text {RANCH_CONTACT.name} at {RANCH_CONTACT.phone}.
           </p>

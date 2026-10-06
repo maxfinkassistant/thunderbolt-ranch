@@ -551,7 +551,7 @@ function notifyRanch_(o, summary, cost) {
     "Order: " + o.code,
     "Share: " + shareLabel_(o.share) + " beef",
     "Harvest: " + seasonLabel_(o.season) + (o.season !== CURRENT_SEASON ? "  (didn't fit in what's left of this season)" : ""),
-    "Total: " + money_(cost.total) + "  ·  Deposit: " + money_(cost.deposit) + "  ·  Balance at pickup: " + money_(cost.balance),
+    "Total: " + money_(cost.total) + "  ·  Deposit: " + money_(cost.deposit) + "  ·  Balance: " + money_(cost.balance),
     "",
     "Customer: " + o.name,
     "Email: " + o.email,
@@ -568,36 +568,72 @@ function notifyRanch_(o, summary, cost) {
 }
 
 function confirmCustomer_(o, summary, cost, depositLink) {
+  const first = (o.name || "").split(" ")[0];
+  const share = shareLabel_(o.share).toLowerCase();
   const subject = "Your Thunderbolt Ranch beef is reserved — " + o.code;
-  const payLine = depositLink
-    ? "Pay your " + money_(cost.deposit) + " deposit here: " + depositLink
-    : "Josh will reach out shortly to collect your " + money_(cost.deposit) + " deposit.";
   const season = seasonCopy_(o.season);
   const rolled = o.season !== CURRENT_SEASON;
-  const bodyText = [
-    "Hi " + (o.name || "").split(" ")[0] + ",",
+  const harvestLine = rolled
+    ? "Our " + seasonCopy_(CURRENT_SEASON).name + " harvest doesn't have a " + share + " left, so your share is reserved from our " + season.name + " harvest — pickup " + season.pickup + "."
+    : "Your share comes from our " + season.name + " harvest — pickup " + season.pickup + ".";
+  const trackUrl = SITE_URL + "/#/track/" + o.code;
+  const steps = [
+    ["This " + season.name, "Harvest. Your beef dry-ages 14 days at Colorado Custom Meat Co in Kersey."],
+    ["After the hang", "Cut and packaged to your cut sheet. You can adjust it until your steer goes to the butcher — just text Josh."],
+    ["Once weighed", "You get an invoice email with your filled-out cut sheet and your exact balance. Pay it by bank (no fee) or card from the link, then sign off — that sends your sheet to the butcher."],
+    ["Pickup, " + season.pickup, "Colorado Custom, 443 4th Street, Kersey CO. We'll confirm the date. It comes out frozen, vacuum-sealed and boxed — just leave room in the vehicle."],
+  ];
+
+  const text = [
+    "Hi " + first + ",",
     "",
-    "Thanks for reserving a " + shareLabel_(o.share).toLowerCase() + " beef from Thunderbolt Ranch. Your order code is " + o.code + ".",
-    rolled
-      ? "Our " + seasonCopy_(CURRENT_SEASON).name + " harvest doesn't have a " + shareLabel_(o.share).toLowerCase() + " left, so your share is reserved from our " + season.name + " harvest — pickup " + season.pickup + "."
-      : "Your share comes from our " + season.name + " harvest — pickup " + season.pickup + ".",
+    "Thanks for reserving a " + share + " beef from Thunderbolt Ranch. Your order code is " + o.code + ".",
+    harvestLine,
     "",
-    payLine,
-    "Your deposit applies to your total of " + money_(cost.total) + "; the balance of " + money_(cost.balance) + " is due at pickup, payable to Thunderbolt Ranch LLC.",
+    depositLink
+      ? "PAY YOUR " + money_(cost.deposit) + " DEPOSIT: " + depositLink
+      : "Josh will reach out shortly to collect your " + money_(cost.deposit) + " deposit.",
+    "Your deposit holds your share and applies to your total. Estimated total " + money_(cost.total) + " — the exact balance is figured on your animal's actual hanging weight, and you'll be invoiced for it once it's weighed. Nothing is due at pickup.",
     "",
     "WHAT HAPPENS NEXT",
-    "This " + season.name + " — harvest. Your beef dry-ages 14 days at Colorado Custom Meat Co in Kersey.",
-    "After the hang — cut and packaged to your cut sheet (you can adjust it until your steer goes to the butcher — just text Josh).",
-    "Pickup, " + season.pickup + " — at Colorado Custom, 443 4th Street, Kersey CO. We'll confirm the date. It comes out frozen and boxed, so just leave room in the vehicle.",
+  ].concat(steps.map(s => s[0] + " — " + s[1])).concat([
     "",
     "YOUR CUT SHEET",
     summary,
     "",
+    "Track your order any time: " + trackUrl,
     "Questions? Call or text Josh — 402-245-8195, or reply to this email.",
     "",
     "— Thunderbolt Ranch · Ranch to Table",
-  ].join("\n");
-  MailApp.sendEmail({ to: o.email, subject: subject, body: bodyText, name: "Thunderbolt Ranch" });
+  ]);
+
+  const btn = (url, label, bg) => '<a href="' + url + '" style="display:inline-block;padding:13px 22px;background:' + bg + ';color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-family:Helvetica,Arial,sans-serif">' + label + '</a>';
+  const html = [
+    '<div style="font-family:Georgia,serif;color:#2b2521;max-width:620px;margin:0 auto;line-height:1.55">',
+    '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#7a3b22">Thunderbolt Ranch · Reserved</div>',
+    '<h1 style="font-weight:400;font-size:26px;margin:6px 0 14px">Your ' + esc_(share) + ' beef is booked, ' + esc_(first) + '.</h1>',
+    '<p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#555;margin:0 0 18px">Order code <b style="font-family:monospace;font-size:15px;color:#2b2521">' + esc_(o.code) + '</b> · ' + esc_(harvestLine) + '</p>',
+    '<div style="margin:0 0 22px;padding:18px;background:#2b2521;color:#f3eee6;border-radius:4px">',
+    depositLink
+      ? '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c8a85a">One step to hold your share</div><div style="margin:10px 0 8px">' + btn(depositLink, 'Pay your ' + money_(cost.deposit) + ' deposit', '#b08d45') + '</div>'
+      : '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c8a85a">Deposit</div><p style="margin:8px 0">Josh will reach out shortly to collect your ' + money_(cost.deposit) + ' deposit.</p>',
+    '<p style="font-size:13px;color:#cfc6b8;margin:6px 0 0">Your deposit applies to your total. Estimated total ' + money_(cost.total) + ' — the exact balance is figured on your animal\'s actual hanging weight. You\'ll be invoiced for it once it\'s weighed, with a link to pay by bank (no fee) or card. <b style="color:#f3eee6">Nothing is due at pickup.</b></p>',
+    '</div>',
+    '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#7a6333;margin-bottom:8px">What happens next</div>',
+    '<table style="border-collapse:collapse;width:100%;font-family:Helvetica,Arial,sans-serif;font-size:14px">',
+  ].concat(steps.map(s =>
+    '<tr><td style="padding:8px 12px 8px 0;vertical-align:top;white-space:nowrap;color:#7a3b22;font-family:monospace;font-size:12px">' + esc_(s[0]) + '</td><td style="padding:8px 0;vertical-align:top;color:#444;border-bottom:1px solid #e6e0d4">' + esc_(s[1]) + '</td></tr>'
+  )).concat([
+    '</table>',
+    '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#7a6333;margin:22px 0 8px">Your cut sheet</div>',
+    '<pre style="font-family:Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6;background:#f7f3ea;border:1px solid #e6e0d4;border-radius:4px;padding:14px;white-space:pre-wrap;margin:0">' + esc_(summary) + '</pre>',
+    '<p style="margin:22px 0 0;font-family:Helvetica,Arial,sans-serif;font-size:14px">' + btn(trackUrl, 'Track your order', '#7a3b22') + '</p>',
+    '<p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#555">Questions? Call or text Josh — 402-245-8195, or just reply to this email.</p>',
+    '<p style="color:#888;font-size:13px">— Thunderbolt Ranch · Ranch to Table</p>',
+    '</div>',
+  ]).join("");
+
+  MailApp.sendEmail({ to: o.email, subject: subject, body: text.join("\n"), htmlBody: html, name: "Thunderbolt Ranch", replyTo: RANCH_INBOX });
 }
 
 /* ---------------- the final invoice ----------------
@@ -742,7 +778,7 @@ function invoiceCustomer_(o, steer, price, opts) {
         opts.achUrl ? "   By bank (ACH), " + money_(price.balance) + ", no fee: " + opts.achUrl : "",
         opts.cardUrl ? "   By card, " + money_(cardAmt) + " (includes a " + feePct + " card fee): " + opts.cardUrl : "",
       ].filter(Boolean).join("\n")
-    : "   By check to Thunderbolt Ranch LLC at pickup.";
+    : "   No pay link yet — call or text Josh, 402-245-8195, to pay by bank or card.";
 
   const text = [
     "Hi " + first + ",",
@@ -782,7 +818,7 @@ function invoiceCustomer_(o, steer, price, opts) {
           + (opts.achUrl ? btn(opts.achUrl, 'Pay ' + money_(price.balance) + ' by bank — no fee', '#7a3b22') + '<div style="font-size:12px;color:#666;margin:6px 0 12px">Bank (ACH) takes a few business days to clear.</div>' : '')
           + (opts.cardUrl ? btn(opts.cardUrl, 'Pay ' + money_(cardAmt) + ' by card', '#5a5047') + '<div style="font-size:12px;color:#666;margin-top:6px">Includes a ' + feePct + ' card fee (' + money_(cardAmt - price.balance) + ').</div>' : '')
           + '</div>'
-        : 'By check to Thunderbolt Ranch LLC at pickup.') + '</li>',
+        : 'No pay link yet — call or text Josh, 402-245-8195, to pay by bank or card.') + '</li>',
     '<li><b>Sign off.</b> Once you\'ve paid and the sheet is right:<br><div style="margin:10px 0">' + btn(opts.confirmUrl, 'Everything looks good & I\'ve paid', '#2b2521') + '</div><span style="font-size:13px;color:#666">That sends your signed cut sheet to the butcher.</span></li>',
     '</ol>',
     '<div style="margin:22px 0;padding:16px 18px;background:#f3ecd8;border-left:4px solid #b08d45;font-family:Helvetica,Arial,sans-serif">',

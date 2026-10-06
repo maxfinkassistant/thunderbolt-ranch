@@ -340,16 +340,16 @@ export const PATTY_SIZES = [
 /* How much of the ground goes to patties. The butcher's minimum is 30 lb. */
 export const PATTY_MIN_LBS = 30;
 /** Colorado Custom's charge for pressing patties. Theirs, not ours —
-    they bill the customer at pickup, so it never lands on the ranch's
+    the ranch collects it with the balance and settles with the butcher —
     invoice. We still estimate it so nobody is surprised at the counter. */
 export const PATTY_RATE = 0.5;   // $/lb
 export const PATTY_LB_OPTIONS = ["30 lb", "40 lb", "50 lb", "60 lb"];
 /* Pressing patties is the butcher's charge, but it reaches them through
-   us: the customer pays the ranch one balance at pickup and we settle with
+   us: the customer pays the ranch one invoiced balance and we settle with
    Colorado Custom. So it belongs on our invoice as a line item, not as a
    separate bill the customer has to think about. */
 export const PATTY_NOTE =
-  "30 lb minimum. Pressing patties adds $0.50/lb, which we add to your balance at pickup.";
+  "30 lb minimum. Pressing patties adds $0.50/lb, which we add to your balance.";
 
 /** Shorter version, for the invoice and tracking page. */
 export const PATTY_BILLING_NOTE =

@@ -138,7 +138,7 @@ export default function Confirm() {
                 )}
               </div>
             ) : (
-              <> Checks are payable to {PAYABLE_TO} at pickup, or {RANCH_CONTACT.name} can take a card over the phone.</>
+              <> No pay link on this order yet — call or text {RANCH_CONTACT.name} at {RANCH_CONTACT.phone} to pay by bank or card.</>
             )}
           </div>
         </div>
