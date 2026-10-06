@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hash routes (#/order, #/how-it-works) are one URL to a crawler, so
+     this is honest: the homepage is the indexable page. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://thunderboltbeef.com/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+</urlset>

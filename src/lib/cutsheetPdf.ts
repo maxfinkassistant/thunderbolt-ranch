@@ -4,7 +4,7 @@
 
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { SHARES, ASSET, TALLOW, PATTY_SIZES, ORGANS } from "../data/config";
-import { effectiveExtra, type Order } from "./store";
+import { effectiveExtra, type Order, type Steer } from "./store";
 
 const X = "X";
 
@@ -34,12 +34,18 @@ function fillYesGrind(form: ReturnType<PDFDocument["getForm"]>, suffix: string, 
   setText(form, keep ? `Yes${suffix}` : `Grind${suffix}`, X);
 }
 
-export async function buildFilledCutSheet(order: Order): Promise<Uint8Array> {
+export async function buildFilledCutSheet(order: Order, steer?: Steer | null): Promise<Uint8Array> {
   const bytes = await fetch(ASSET("ccmc-cut-sheet.pdf")).then((r) => r.arrayBuffer());
-  return fillCutSheet(order, bytes);
+  return fillCutSheet(order, bytes, steer);
 }
 
-export async function fillCutSheet(order: Order, bytes: ArrayBuffer | Uint8Array): Promise<Uint8Array> {
+const prettyDate = (ymd?: string) => {
+  if (!ymd) return "";
+  const d = new Date(ymd + "T12:00:00");
+  return isNaN(d.getTime()) ? ymd : d.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+};
+
+export async function fillCutSheet(order: Order, bytes: ArrayBuffer | Uint8Array, steer?: Steer | null): Promise<Uint8Array> {
   const doc = await PDFDocument.load(bytes);
   const form = doc.getForm();
   const a = order.cutSheet;
@@ -50,8 +56,13 @@ export async function fillCutSheet(order: Order, bytes: ArrayBuffer | Uint8Array
   setText(form, "Text3", order.address);
   setText(form, "Text4", order.email);
   setText(form, "Text5", order.phone);
-  /* KILL DATE stays blank — harvest is seasonal, the butcher writes the day in */
-  setText(form, "CARCASS WEIGHT", `~${SHARES[order.share].hanging} lb (est)`);
+  /* The steer fills the top of the form once the ranch has entered it;
+     before that the weight is the typical estimate and the rest is blank. */
+  setText(form, "KILL DATE", prettyDate(steer?.killDate));
+  setText(form, "TAG", steer?.id ?? "");
+  setText(form, "CARCASS WEIGHT", steer?.hangingWeight
+    ? `${steer.hangingWeight} lb`
+    : `~${SHARES[order.share].hanging} lb (est)`);
   setText(form, "WHOLE   12   14", SHARES[order.share].label.toUpperCase());
 
   /* main cuts */
@@ -147,8 +158,6 @@ async function addSpecialRequestsPage(doc: PDFDocument, order: Order) {
   }
   if (a.notes.trim()) items.push(["Notes from the customer", a.notes.trim()]);
 
-  if (!items.length) return;
-
   /* The standard fonts are WinAnsi-only and pdf-lib throws on anything
      else, so a pasted emoji or smart character can't be allowed through. */
   const safe = (text: string) =>
@@ -197,13 +206,22 @@ async function addSpecialRequestsPage(doc: PDFDocument, order: Order) {
     y -= 12;
   }
 
+  /* a ruled notes area, so there's always somewhere to write */
+  y -= 6;
+  page.drawText("NOTES", { x: 54, y, size: 9, font: bold, color: mute });
+  y -= 22;
+  while (y > 110) {
+    page.drawLine({ start: { x: 54, y }, end: { x: 558, y }, thickness: 0.5, color: rgb(0.75, 0.73, 0.7) });
+    y -= 24;
+  }
+
   page.drawText("Questions on any of this? Call Colorado Custom Meat Co at 970-356-2333.", {
-    x: 54, y: Math.max(y, 60), size: 9.5, font: body, color: mute,
+    x: 54, y: 60, size: 9.5, font: body, color: mute,
   });
 }
 
-export async function downloadCutSheet(order: Order) {
-  const bytes = await buildFilledCutSheet(order);
+export async function downloadCutSheet(order: Order, steer?: Steer | null) {
+  const bytes = await buildFilledCutSheet(order, steer);
   const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/pdf" }));
   const link = document.createElement("a");
   link.href = url;

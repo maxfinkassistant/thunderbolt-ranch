@@ -37,6 +37,8 @@ export interface PublicPricing {
   hangingWeight: number;
   rate: number;
   readyDate?: string;
+  steerId?: string;
+  killDate?: string;
 }
 
 export async function fetchOrder(code: string): Promise<Order | null> {

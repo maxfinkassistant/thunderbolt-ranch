@@ -31,7 +31,7 @@ export default function Layout() {
         <nav className="site-nav">
           <NavLink to="/how-it-works">How it works</NavLink>
           <NavLink to="/track">Track my order</NavLink>
-          <Link to="/order" className="btn btn-solid nav-cta">Order beef</Link>
+          <Link to="/order" className="btn btn-cta nav-cta">Reserve your beef</Link>
         </nav>
       </header>
 

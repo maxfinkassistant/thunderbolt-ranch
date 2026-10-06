@@ -1,6 +1,6 @@
 /* Turn cut-sheet answers into a human-readable estimated box,
    and the money math. All counts are estimates for a typical
-   1,500 lb animal, scaled by share and steak thickness. */
+   1,000 lb-hanging animal, scaled by share and steak thickness. */
 
 import {
   SHARES, MAIN_CUTS, EXTRA_GROUPS, THICKNESS_OPTIONS,

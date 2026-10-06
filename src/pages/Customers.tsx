@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  SHARES, SEASONS, CURRENT_SEASON, DEPOSIT, HANGING_RATE, seasonOf, money, money2,
+  SHARES, SEASONS, CURRENT_SEASON, DEPOSIT, HANGING_RATE, seasonOf, money, money2, type Season,
   type SeasonId,
 } from "../data/config";
 import {
@@ -14,7 +14,7 @@ import {
   DEFAULT_SETTINGS,
   type Order, type OrderStatus, type Steer, type SeasonSettings,
 } from "../lib/store";
-import { downloadCutSheet } from "../lib/cutsheetPdf";
+import { downloadCutSheet, buildFilledCutSheet } from "../lib/cutsheetPdf";
 import { finalPrice } from "../lib/estimate";
 import {
   backendConfigured, checkAdminKey, fetchOffice, pushStatus,
@@ -40,31 +40,59 @@ const KEY_KEY = "tr.admin.key";
    validated server-side and never lives in this code. */
 const DEMO_PASSCODE = "KERSEY";
 
-function exportCsv(orders: Order[], steers: Steer[]) {
-  const head = [
-    "code", "status", "name", "email", "phone", "address", "share", "harvest",
-    "steer", "steer_hanging_lbs", "est_ready", "est_takehome_lbs",
-    "total", "actual_total", "deposit", "balance", "created",
-  ];
-  const rows = orders.map((o) => {
-    const steer = steers.find((s) => s.id === o.steer);
-    const actual = actualTotal(o, steer);
-    return [
-      o.code, o.status, o.name, o.email, o.phone, o.address,
-      o.share, seasonOf(o).label,
-      o.steer ?? "", steer?.hangingWeight ?? "", steer?.readyDate ?? "", SHARES[o.share].takehome,
-      SHARES[o.share].total, actual ?? "", DEPOSIT, (actual ?? SHARES[o.share].total) - DEPOSIT,
-      new Date(o.createdAt).toISOString().slice(0, 10),
-    ];
-  });
+/* ---------------- exports, one harvest at a time ----------------
+   Three files because three people want them: the roster for the
+   ranch, the cut sheets for the butcher, the invoices for the books. */
+
+function csvDownload(name: string, head: string[], rows: (string | number)[][]) {
   const csv = [head, ...rows]
-    .map((r) => r.map((c) => `"${String(c).split('"').join('""')}"`).join(","))
+    .map((r) => r.map((c) => `"${String(c ?? "").split('"').join('""')}"`).join(","))
     .join("\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
   const a = document.createElement("a");
-  a.href = url;
-  a.download = "thunderbolt-orders.csv";
-  a.click();
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+}
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+function exportCustomers(orders: Order[], steers: Steer[], season: Season) {
+  csvDownload(`thunderbolt-${slug(season.label)}-customers.csv`,
+    ["code", "status", "name", "email", "phone", "address", "share", "harvest", "steer", "steer_hanging_lbs", "kill_date", "est_ready", "created"],
+    orders.map((o) => {
+      const st = steers.find((x) => x.id === o.steer);
+      return [o.code, o.status, o.name, o.email, o.phone, o.address, SHARES[o.share].label, season.label,
+        o.steer ?? "", st?.hangingWeight ?? "", st?.killDate ?? "", st?.readyDate ?? "", new Date(o.createdAt).toISOString().slice(0, 10)];
+    }));
+}
+
+function exportInvoices(orders: Order[], steers: Steer[], season: Season) {
+  csvDownload(`thunderbolt-${slug(season.label)}-invoices.csv`,
+    ["code", "name", "email", "share", "steer", "hanging_lbs", "share_lbs", "rate_per_lb", "beef_total", "patty_lbs", "patty_charge", "total", "deposit", "balance", "priced_on", "status"],
+    orders.map((o) => {
+      const st = steers.find((x) => x.id === o.steer);
+      const p = finalPrice(o.share, st, o.cutSheet);
+      return p
+        ? [o.code, o.name, o.email, SHARES[o.share].label, o.steer ?? "", p.hangingLbs, p.shareLbs, p.rate.toFixed(2), p.beefTotal, p.pattyLbs, p.pattyCharge, p.total, p.deposit, p.balance, "actual weight", o.status]
+        : [o.code, o.name, o.email, SHARES[o.share].label, o.steer ?? "", "", SHARES[o.share].hanging, HANGING_RATE.toFixed(2), SHARES[o.share].total, "", "", SHARES[o.share].total, DEPOSIT, SHARES[o.share].total - DEPOSIT, "estimate", o.status];
+    }));
+}
+
+/** Every filled cut sheet for the harvest, stapled into one PDF in
+    roster order — what actually goes to the butcher. */
+async function exportCutSheets(orders: Order[], steers: Steer[], season: Season) {
+  const { PDFDocument } = await import("pdf-lib");
+  const out = await PDFDocument.create();
+  for (const o of orders) {
+    const st = steers.find((x) => x.id === o.steer) ?? null;
+    const bytes = await buildFilledCutSheet(o, st);
+    const doc = await PDFDocument.load(bytes);
+    const pages = await out.copyPages(doc, doc.getPageIndices());
+    for (const pg of pages) out.addPage(pg);
+  }
+  const url = URL.createObjectURL(new Blob([await out.save() as BlobPart], { type: "application/pdf" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = `thunderbolt-${slug(season.label)}-cut-sheets.pdf`; a.click();
   URL.revokeObjectURL(url);
 }
 
@@ -78,17 +106,18 @@ function SteerRow({
   onSave: (next: Steer, originalId?: string) => Promise<void> | void;
   onRemove?: () => void;
 }) {
-  const blank = { id: "", season: CURRENT_SEASON as SeasonId, hangingWeight: "", readyDate: "", rate: "" };
+  const blank = { id: "", season: CURRENT_SEASON as SeasonId, hangingWeight: "", readyDate: "", rate: "", killDate: "" };
   const from = (s?: Steer) =>
     s ? {
       id: s.id, season: s.season,
       hangingWeight: s.hangingWeight ? String(s.hangingWeight) : "",
       readyDate: s.readyDate ?? "",
       rate: s.rate ? String(s.rate) : "",
+      killDate: s.killDate ?? "",
     } : blank;
   const [d, setD] = useState(() => from(steer));
   const [busy, setBusy] = useState(false);
-  useEffect(() => { setD(from(steer)); }, [steer?.id, steer?.season, steer?.hangingWeight, steer?.readyDate, steer?.rate]);
+  useEffect(() => { setD(from(steer)); }, [steer?.id, steer?.season, steer?.hangingWeight, steer?.readyDate, steer?.rate, steer?.killDate]);
 
   const id = d.id.trim();
   const dirty = JSON.stringify(d) !== JSON.stringify(from(steer));
@@ -104,7 +133,7 @@ function SteerRow({
   const save = async () => {
     setBusy(true);
     try {
-      await onSave({ id, season: d.season, hangingWeight: weight, readyDate: d.readyDate || undefined, rate }, steer?.id);
+      await onSave({ id, season: d.season, hangingWeight: weight, readyDate: d.readyDate || undefined, rate, killDate: d.killDate || undefined }, steer?.id);
       if (!steer) setD(blank);
     } finally {
       setBusy(false);
@@ -142,6 +171,10 @@ function SteerRow({
             : rate !== undefined && rate > HANGING_RATE
               ? <span className="admin-sub" style={{ color: "var(--rust)" }}>Above standard</span>
               : <span className="admin-sub">Blank = standard</span>}
+      </td>
+      <td>
+        <input className="admin-input" type="date" value={d.killDate} aria-label={`Kill date for ${label}`}
+          onChange={(e) => setD({ ...d, killDate: e.target.value })} />
       </td>
       <td>
         <input className="admin-input" type="date" value={d.readyDate} aria-label={`Estimated ready date for ${label}`}
@@ -241,6 +274,8 @@ export default function Customers() {
   const [tick, setTick] = useState(0);
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
   const [invoiceBusy, setInvoiceBusy] = useState<string | null>(null);
+  const [exportSeason, setExportSeason] = useState<SeasonId>(CURRENT_SEASON);
+  const [exportBusy, setExportBusy] = useState(false);
   const [invoiceSent, setInvoiceSent] = useState<Record<string, boolean>>({});
   const [remote, setRemote] = useState<Office | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -249,6 +284,10 @@ export default function Customers() {
   const live = backendConfigured();
   const local = useMemo(() => listOrders(), [tick]);
   const orders = remote?.orders ?? local;
+  const exportOrders = useMemo(
+    () => orders.filter((o) => !o.sample && seasonOf(o).id === exportSeason),
+    [orders, exportSeason],
+  );
   const steers = useMemo(() => (live ? remote?.steers ?? [] : listSteers()), [live, remote, tick]);
   const settings = useMemo(() => (live ? remote?.settings ?? DEFAULT_SETTINGS : getSettings()), [live, remote, tick]);
   /* an Apps Script from before steer tracking answers without these */
@@ -398,7 +437,18 @@ export default function Customers() {
         </div>
         <div className="admin-actions">
           <button className="btn btn-ghost" onClick={() => setTick((x) => x + 1)}>Refresh</button>
-          <button className="btn btn-ghost" onClick={() => exportCsv(orders, steers)}>Export CSV</button>
+          <span className="export-bar">
+            <select className="admin-select" value={exportSeason} aria-label="Harvest to export"
+              onChange={(e) => setExportSeason(e.target.value as SeasonId)}>
+              {Object.values(SEASONS).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+            </select>
+            <button className="btn btn-ghost" onClick={() => exportCustomers(exportOrders, steers, SEASONS[exportSeason])}>Customers CSV</button>
+            <button className="btn btn-ghost" onClick={() => exportInvoices(exportOrders, steers, SEASONS[exportSeason])}>Invoices CSV</button>
+            <button className="btn btn-ghost" disabled={exportBusy || !exportOrders.length}
+              onClick={async () => { setExportBusy(true); try { await exportCutSheets(exportOrders, steers, SEASONS[exportSeason]); } finally { setExportBusy(false); } }}>
+              {exportBusy ? "Building…" : `Cut sheets PDF (${exportOrders.length})`}
+            </button>
+          </span>
           <button className="btn btn-ghost" onClick={() => { sessionStorage.removeItem(AUTH_KEY); sessionStorage.removeItem(KEY_KEY); setAuthed(false); }}>
             Lock up
           </button>
@@ -486,7 +536,7 @@ export default function Customers() {
                     <button
                       className="small" style={{ textDecoration: "underline" }}
                       disabled={pdfBusy === o.code}
-                      onClick={async () => { setPdfBusy(o.code); try { await downloadCutSheet(o); } finally { setPdfBusy(null); } }}
+                      onClick={async () => { setPdfBusy(o.code); try { await downloadCutSheet(o, steer); } finally { setPdfBusy(null); } }}
                     >
                       {pdfBusy === o.code ? "…" : "CCMC PDF"}
                     </button>
@@ -550,7 +600,7 @@ export default function Customers() {
             <table className="admin-table">
               <thead>
                 <tr>
-                  <th>Steer ID</th><th>Harvest</th><th>Hanging weight</th><th>Price per lb</th><th>Est. ready date</th><th>Orders</th><th></th>
+                  <th>Steer ID</th><th>Harvest</th><th>Hanging weight</th><th>Price per lb</th><th>Kill date</th><th>Est. ready date</th><th>Orders</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -565,7 +615,7 @@ export default function Customers() {
                   />
                 ))}
                 {steers.length === 0 && (
-                  <tr><td colSpan={7} className="mute" style={{ textAlign: "center", padding: "var(--space-xl)" }}>
+                  <tr><td colSpan={8} className="mute" style={{ textAlign: "center", padding: "var(--space-xl)" }}>
                     No steers entered yet. Add the first one below.
                   </td></tr>
                 )}

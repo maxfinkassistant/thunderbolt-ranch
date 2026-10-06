@@ -20,7 +20,7 @@
 
 ## 2. The Gen 1 offer
 
-- Quarter $1,350 · Half $2,700 · Whole $5,400 (typical weights; customers pay actual hanging × $6)
+- Quarter $1,500 · Half $3,000 · Whole $6,000 (typical weights; customers pay actual hanging × $6)
 - One harvest: kill Sept 16 → 14-day hang → pickup week of Oct 1 at Colorado Custom, Kersey
 - **Order deadline Sept 30** — every campaign counts down to this one real date
 - Pickup only; no processing fees, no hidden costs
@@ -48,7 +48,7 @@
 - **The steer map** — tap-a-primal yield popups; screenshot/screen-record it for social.
 - **The wizard walkthrough** — a 60-second screen recording of "9–15 ribeyes at 1-inch… 4–8 at 2-inch" is the whole pitch for BBQ people.
 - **The price math** — $8.57 take-home vs. $10.47 USDA Choice average, side by side.
-- **From Pasture to Freezer** — the three-weights graphic (1,500 → 900 → 630 lb) educates away the #1 confusion (hanging vs. take-home) before it becomes a phone call.
+- **From Pasture to Freezer** — the three-weights graphic (1,650 → 1,000 → 700 lb) educates away the #1 confusion (hanging vs. take-home) before it becomes a phone call.
 - **Harvest updates** — a photo email at kill, mid-hang, and packaging keeps buyers engaged through the two-week wait.
 
 ## 6. Calendar to Sept 30

@@ -7,7 +7,7 @@ import {
   RIB_YIELD, RIB_ROAST_LBS, TBONE_YIELD, STRIP_YIELD, FILET_YIELD,
   THICKNESS_OPTIONS, PER_PACKAGE_OPTIONS, ROAST_SIZE_OPTIONS,
   GROUND_PACK_OPTIONS, PATTY_SIZES, PATTY_LB_OPTIONS, PATTY_NOTE, ORGANS,
-  TALLOW, CUT_MEDIA,
+  TALLOW, CUT_MEDIA, LIVE_TYP, HANGING_TYP,
   steakCount, roastCount, money, money2, PAYABLE_TO, RANCH_CONTACT,
   type ShareId,
 } from "../data/config";
@@ -226,7 +226,7 @@ export default function Order() {
         )}
 
         <p className="small mute measure" style={{ marginBottom: "var(--space-lg)" }}>
-          <sup>*</sup>Estimates based on a typical 1,500 lb animal — your actual animal may run
+          <sup>*</sup>Estimates based on a typical {LIVE_TYP.toLocaleString()} lb animal (about {HANGING_TYP.toLocaleString()} lb hanging) — yours may run
           somewhat above or below these figures, and you pay {money2(HANGING_RATE)}/lb on its
           real hanging weight. Next: a short walk-through builds your custom cut sheet, one
           question at a time, with a photo and a plain-English explanation for every cut.

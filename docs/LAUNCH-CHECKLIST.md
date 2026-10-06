@@ -4,7 +4,7 @@
 not a month-long build. Ship the minimum that takes real deposits.*
 
 ## Done (working in the demo)
-- [x] Pricing per the one-pager: $6/lb hanging, ≈$8.57/lb take-home, $250 deposit, Q/H/W $1,350/$2,700/$5,400
+- [x] Pricing per the one-pager: $6/lb hanging, ≈$8.57/lb take-home, $250 deposit, Q/H/W $1,500/$3,000/$6,000
 - [x] Guided cut-sheet wizard (13 questions, explainers, thickness-aware min–max counts)
 - [x] Auto-filled CCMC cutting-instructions PDF (verified against the real form)
 - [x] Landing + How It Works aligned to one-pager language and claims

@@ -14,10 +14,13 @@ export const HANGING_RATE = 6.0;        // $/lb hanging weight
 export const TAKEHOME_RATE_EST = 8.57;  // $/lb take-home estimate
 export const DEPOSIT = 250;             // flat, all share sizes
 
-/* Typical 1,500 lb animal (one-pager: estimates, not promises). */
-export const LIVE_TYP = 1500;
-export const HANGING_TYP = 900;   // 60% of live
-export const TAKEHOME_TYP = 630;  // 70% of hanging
+/* Every estimate on the site is built from a typical 1,000 lb hanging
+   carcass. Live weight is back-derived (≈ 60% dresses out); take-home
+   is ≈ 70% of hanging. Estimates, not promises — customers pay on the
+   actual hanging weight of their animal. */
+export const HANGING_TYP = 1000;  // the anchor
+export const LIVE_TYP = 1650;     // ≈ hanging ÷ 0.6, rounded for copy
+export const TAKEHOME_TYP = 700;  // 70% of hanging
 
 /* USDA national retail averages, April 2026 (one-pager). */
 export const USDA_CHOICE = 10.47;
@@ -37,17 +40,17 @@ export interface Share {
 export const SHARES: Record<ShareId, Share> = {
   quarter: {
     id: "quarter", label: "Quarter", frac: 0.25,
-    hanging: 225, takehome: 157, total: 1350,
+    hanging: 250, takehome: 175, total: 1500,
     freezer: "≈ 5 cu ft", feeds: "2–3 people for about 6 months",
   },
   half: {
     id: "half", label: "Half", frac: 0.5,
-    hanging: 450, takehome: 315, total: 2700,
+    hanging: 500, takehome: 350, total: 3000,
     freezer: "≈ 10 cu ft", feeds: "a family of 4 for about a year",
   },
   whole: {
     id: "whole", label: "Whole", frac: 1,
-    hanging: 900, takehome: 630, total: 5400,
+    hanging: 1000, takehome: 700, total: 6000,
     freezer: "≈ 20 cu ft", feeds: "a large family, or two households",
   },
 };
@@ -463,15 +466,15 @@ export interface GroceryCut {
 export const GROCERY_SOURCE = { store: "King Soopers", where: "Denver", date: "September 30, 2026" };
 
 export const GROCERY_CUTS: GroceryCut[] = [
-  { id: "rib",     name: "Ribeye & rib steaks",     store: "Choice boneless ribeye",       retail: 20.99, lbsWhole: 20 },
-  { id: "loin",    name: "T-bone, strip & filet",   store: "Choice boneless strip steak",  retail: 17.99, lbsWhole: 25 },
-  { id: "sirloin", name: "Sirloin steaks",          store: "Choice top sirloin steak",     retail: 13.99, lbsWhole: 22 },
-  { id: "fast",    name: "Flank, skirt & tri-tip",  store: "Choice flank steak",           retail: 14.99, lbsWhole: 20 },
-  { id: "roast",   name: "Chuck & round roasts",    store: "Choice chuck roast",           retail: 9.99,  lbsWhole: 120 },
-  { id: "stew",    name: "Stew meat & cube steak",  store: "Choice beef for stew",         retail: 10.00, lbsWhole: 25 },
-  { id: "ribs",    name: "Short ribs & shanks",     store: "Boneless short ribs",          retail: 11.99, lbsWhole: 28 },
-  { id: "brisket", name: "Brisket",                 store: "Flat-cut brisket",             retail: 8.99,  lbsWhole: 20 },
-  { id: "ground",  name: "Ground beef",             store: "80/20 ground beef, 1 lb tray", retail: 7.49,  lbsWhole: 350 },
+  { id: "rib",     name: "Ribeye & rib steaks",     store: "Choice boneless ribeye",       retail: 20.99, lbsWhole: 22 },
+  { id: "loin",    name: "T-bone, strip & filet",   store: "Choice boneless strip steak",  retail: 17.99, lbsWhole: 28 },
+  { id: "sirloin", name: "Sirloin steaks",          store: "Choice top sirloin steak",     retail: 13.99, lbsWhole: 24 },
+  { id: "fast",    name: "Flank, skirt & tri-tip",  store: "Choice flank steak",           retail: 14.99, lbsWhole: 22 },
+  { id: "roast",   name: "Chuck & round roasts",    store: "Choice chuck roast",           retail: 9.99,  lbsWhole: 133 },
+  { id: "stew",    name: "Stew meat & cube steak",  store: "Choice beef for stew",         retail: 10.00, lbsWhole: 28 },
+  { id: "ribs",    name: "Short ribs & shanks",     store: "Boneless short ribs",          retail: 11.99, lbsWhole: 31 },
+  { id: "brisket", name: "Brisket",                 store: "Flat-cut brisket",             retail: 8.99,  lbsWhole: 22 },
+  { id: "ground",  name: "Ground beef",             store: "80/20 ground beef, 1 lb tray", retail: 7.49,  lbsWhole: 390 },
 ];
 
 export interface SavingsRow {

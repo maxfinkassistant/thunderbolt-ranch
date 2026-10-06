@@ -84,7 +84,7 @@ create table orders (
 Now live in `src/data/config.ts`:
 - $6.00/lb hanging weight, all share sizes; ≈$8.57/lb take-home estimate
 - $250 deposit across the board; balance to Thunderbolt Ranch LLC at pickup; no processing fees
-- Quarter $1,350 / Half $2,700 / Whole $5,400 on typical weights (225/450/900 lb hanging)
+- Quarter $1,500 / Half $3,000 / Whole $6,000 on typical weights (250/500/1,000 lb hanging)
 - October 2026 harvest only: kill Sept 16, 14-day hang, pickup week of Oct 1; order by Sept 30
 - Pickup only at Colorado Custom, Kersey ($10/day storage after the grace week)
 

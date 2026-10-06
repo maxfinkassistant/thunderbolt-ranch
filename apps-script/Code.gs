@@ -42,7 +42,7 @@ const SEASON_COPY = {
 const DEFAULT_CAPACITY = 7;   // steers this season, until the Ranch Office says otherwise
 const SHARE_FRAC = { quarter: 0.25, half: 0.5, whole: 1 };
 const DEPOSIT = 250;          // flat, every share size
-const HANGING_TYP = 900;      // lb, a typical carcass — above this counts as heavy
+const HANGING_TYP = 1000;     // lb, a typical carcass — above this counts as heavy
 const PATTY_RATE = 0.5;       // $/lb — the butcher's patty charge, collected by us and passed on
 const PATTY_MIN_LBS = 30;
 
@@ -55,7 +55,7 @@ const HEADERS = [
 const COL_STATUS = 3, COL_STEER = 15, COL_SEASON = 16;
 
 const STEER_SHEET = "Steers";
-const STEER_HEADERS = ["Steer ID", "Season", "Hanging weight (lb)", "Est. ready date", "Price per lb ($)"];
+const STEER_HEADERS = ["Steer ID", "Season", "Hanging weight (lb)", "Est. ready date", "Price per lb ($)", "Kill date"];
 const STANDARD_RATE = 6.0;   // $/lb hanging, unless a steer says otherwise
 
 function props_() { return PropertiesService.getScriptProperties(); }
@@ -100,6 +100,7 @@ function steerSheet_() {
     /* IDs and dates stay exactly as typed — no "007" → 7, no timezone drift */
     sh.getRange("A:A").setNumberFormat("@");
     sh.getRange("D:D").setNumberFormat("@");
+    sh.getRange("F:F").setNumberFormat("@");
   } else if (sh.getLastColumn() < STEER_HEADERS.length) {
     /* a Steers sheet from before per-steer pricing: add the heading */
     sh.getRange(1, 1, 1, STEER_HEADERS.length).setValues([STEER_HEADERS]).setFontWeight("bold");
@@ -133,6 +134,7 @@ function steers_() {
       if (Number(r[2]) > 0) steer.hangingWeight = Number(r[2]);
       if (r[3]) steer.readyDate = dateText_(r[3]);
       if (Number(r[4]) > 0) steer.rate = Number(r[4]);
+      if (r[5]) steer.killDate = dateText_(r[5]);
       return steer;
     });
 }
@@ -199,6 +201,9 @@ function doGet_(e) {
         rate: Number(steer.rate) > 0 ? Number(steer.rate) : STANDARD_RATE,
       };
       if (steer.readyDate) out.pricing.readyDate = steer.readyDate;
+      /* enough for the customer's own cut-sheet PDF header, nothing more */
+      out.pricing.steerId = steer.id;
+      if (steer.killDate) out.pricing.killDate = steer.killDate;
     }
     return json_(out);
   }
@@ -299,6 +304,7 @@ function adminPost_(body) {
       Number(st.hangingWeight) > 0 ? Number(st.hangingWeight) : "",
       st.readyDate || "",
       Number(st.rate) > 0 ? Number(st.rate) : "",
+      st.killDate || "",
     ];
     const at = steerRow_(was);
     if (at < 0) sh.appendRow(values);

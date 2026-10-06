@@ -66,7 +66,7 @@ export default function CustomerTicket() {
           <button
             className="btn btn-solid"
             disabled={pdfBusy}
-            onClick={async () => { setPdfBusy(true); try { await downloadCutSheet(order); } finally { setPdfBusy(false); } }}
+            onClick={async () => { setPdfBusy(true); try { await downloadCutSheet(order, steer); } finally { setPdfBusy(false); } }}
           >
             {pdfBusy ? "Building…" : "CCMC cut sheet PDF"}
           </button>

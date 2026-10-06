@@ -3,8 +3,86 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Thunderbolt Ranch — Bulk Beef, Northeast Colorado</title>
-    <meta name="description" content="Ranch to table: one Angus animal, pasture-raised in Colorado and grain-finished for rich marbling. Quarter, half, or whole beef at $6/lb hanging weight, cut your way. Pickup at Colorado Custom Meat Co in Kersey." />
+    <title>Thunderbolt Ranch — From Our Ranch to Your Table</title>
+    <meta name="description" content="Buy a quarter, half, or whole beef direct from a Colorado ranch. One Angus animal, pasture-raised and grain-finished, cut to your own cut sheet. $6/lb hanging weight, $250 deposit. Pickup in Kersey, CO." />
+    <link rel="canonical" href="https://thunderboltbeef.com/" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="theme-color" content="#2b2521" />
+    <meta name="geo.region" content="US-CO" />
+    <meta name="geo.placename" content="Kersey, Colorado" />
+
+    <!-- social previews: what shows up when the link is texted or shared -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Thunderbolt Ranch" />
+    <meta property="og:title" content="Thunderbolt Ranch — From Our Ranch to Your Table" />
+    <meta property="og:description" content="Quarter, half, or whole beef from one Colorado Angus, cut your way. $6/lb hanging weight. Pickup in Kersey, CO." />
+    <meta property="og:url" content="https://thunderboltbeef.com/" />
+    <meta property="og:image" content="https://thunderboltbeef.com/angus-steer.jpg" />
+    <meta property="og:image:alt" content="A black Angus steer on Colorado pasture" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Thunderbolt Ranch — From Our Ranch to Your Table" />
+    <meta name="twitter:description" content="Quarter, half, or whole beef from one Colorado Angus, cut your way. $6/lb hanging weight. Pickup in Kersey, CO." />
+    <meta name="twitter:image" content="https://thunderboltbeef.com/angus-steer.jpg" />
+
+    <!-- structured data: who we are and what's for sale. Prices mirror
+         SHARES in src/data/config.ts — change both together. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": ["LocalBusiness", "Farm"],
+          "@id": "https://thunderboltbeef.com/#ranch",
+          "name": "Thunderbolt Ranch",
+          "url": "https://thunderboltbeef.com/",
+          "image": "https://thunderboltbeef.com/angus-steer.jpg",
+          "logo": "https://thunderboltbeef.com/thunderbolt-logo.png",
+          "description": "Colorado ranch selling quarter, half, and whole Angus beef direct to families. Pasture-raised, grain-finished, processed at Colorado Custom Meat Co in Kersey.",
+          "telephone": "+1-402-245-8195",
+          "email": "thunderboltbeef@gmail.com",
+          "areaServed": [
+            { "@type": "State", "name": "Colorado" },
+            { "@type": "City", "name": "Denver" },
+            { "@type": "City", "name": "Fort Collins" },
+            { "@type": "City", "name": "Greeley" }
+          ],
+          "address": { "@type": "PostalAddress", "addressRegion": "CO", "addressCountry": "US" },
+          "priceRange": "$1,500 – $6,000",
+          "slogan": "From our ranch to your table"
+        },
+        {
+          "@type": "Product",
+          "name": "Quarter beef — Thunderbolt Ranch",
+          "description": "About 175 lb of custom-cut Angus beef from one Colorado animal. Pay $6/lb on actual hanging weight; $250 deposit.",
+          "brand": { "@type": "Brand", "name": "Thunderbolt Ranch" },
+          "offers": { "@type": "Offer", "price": "1500", "priceCurrency": "USD", "url": "https://thunderboltbeef.com/#/order", "availability": "https://schema.org/PreOrder", "seller": { "@id": "https://thunderboltbeef.com/#ranch" } }
+        },
+        {
+          "@type": "Product",
+          "name": "Half beef — Thunderbolt Ranch",
+          "description": "About 350 lb of custom-cut Angus beef from one Colorado animal. Pay $6/lb on actual hanging weight; $250 deposit.",
+          "brand": { "@type": "Brand", "name": "Thunderbolt Ranch" },
+          "offers": { "@type": "Offer", "price": "3000", "priceCurrency": "USD", "url": "https://thunderboltbeef.com/#/order", "availability": "https://schema.org/PreOrder", "seller": { "@id": "https://thunderboltbeef.com/#ranch" } }
+        },
+        {
+          "@type": "Product",
+          "name": "Whole beef — Thunderbolt Ranch",
+          "description": "About 700 lb of custom-cut Angus beef from one Colorado animal. Pay $6/lb on actual hanging weight; $250 deposit.",
+          "brand": { "@type": "Brand", "name": "Thunderbolt Ranch" },
+          "offers": { "@type": "Offer", "price": "6000", "priceCurrency": "USD", "url": "https://thunderboltbeef.com/#/order", "availability": "https://schema.org/PreOrder", "seller": { "@id": "https://thunderboltbeef.com/#ranch" } }
+        },
+        {
+          "@type": "FAQPage",
+          "mainEntity": [
+            { "@type": "Question", "name": "How much beef is a half beef?", "acceptedAnswer": { "@type": "Answer", "text": "About 350 lb of finished, vacuum-sealed beef from a typical 1,000 lb hanging carcass — roughly 10 cubic feet of freezer space." } },
+            { "@type": "Question", "name": "What does hanging weight mean?", "acceptedAnswer": { "@type": "Answer", "text": "The weight of the carcass after harvest, before cutting. You pay $6 per pound of hanging weight; about 70% of that comes home as packaged beef." } },
+            { "@type": "Question", "name": "Where do I pick up my beef?", "acceptedAnswer": { "@type": "Answer", "text": "Colorado Custom Meat Co, 443 4th Street, Kersey, Colorado — about an hour north of Denver. Everything comes frozen, vacuum-sealed, labeled and boxed." } }
+          ]
+        }
+      ]
+    }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Albert+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet" />

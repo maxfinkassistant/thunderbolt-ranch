@@ -135,7 +135,7 @@ export default function Track() {
           <button
             className="btn btn-ghost"
             disabled={pdfBusy}
-            onClick={async () => { setPdfBusy(true); try { await downloadCutSheet(order); } finally { setPdfBusy(false); } }}
+            onClick={async () => { setPdfBusy(true); try { await downloadCutSheet(order, weighed ? { id: pricing?.steerId ?? order.steer ?? '', season: seasonOf(order).id, ...weighed } : undefined); } finally { setPdfBusy(false); } }}
           >
             {pdfBusy ? "Building…" : "Cut sheet PDF"}
           </button>
