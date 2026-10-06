@@ -22,7 +22,7 @@ export default function Confirm() {
   const [name, setName] = useState("");
   const [paid, setPaid] = useState(params.get("paid") === "1");
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<{ paid: boolean; sentToButcher: boolean } | null>(null);
+  const [done, setDone] = useState<{ paid: boolean; pending: boolean; sentToButcher: boolean } | null>(null);
 
   useEffect(() => {
     if (!backendConfigured()) { setError("demo"); return; }
@@ -65,7 +65,7 @@ export default function Confirm() {
     try {
       const pdf = bytesToBase64(await buildSignedCutSheet(order, steer, name.trim()));
       const r = await submitConfirm(code, token, name.trim(), pdf);
-      setDone({ paid: r.paid, sentToButcher: r.sentToButcher });
+      setDone({ paid: r.paid, pending: r.pending, sentToButcher: r.sentToButcher });
       window.scrollTo({ top: 0 });
     } catch (err) {
       setError((err as Error).message);
@@ -78,6 +78,7 @@ export default function Confirm() {
   if (done || alreadySigned) {
     const sent = done?.sentToButcher ?? !!order.butcherSentAt;
     const isPaid = done?.paid ?? !!order.paidAt;
+    const pending = done?.pending ?? order.payState === "pending";
     return (
       <main className="page confirm-wrap">
         <div className="tag" style={{ color: "var(--rust)", marginBottom: "var(--space-md)" }}>Signed</div>
@@ -89,7 +90,9 @@ export default function Confirm() {
             ? <>Payment confirmed and your signed cut sheet has gone to {PROCESSOR.name}. Nothing else to do until pickup.</>
             : isPaid
               ? <>Your signed cut sheet is with the ranch and on its way to the butcher.</>
-              : <>Your signed cut sheet is with the ranch. We couldn't see your payment in Stripe yet — that can take a few minutes. {RANCH_CONTACT.name} will match it up and send your sheet on to the butcher.</>}
+              : pending
+                ? <>Your bank payment is processing — ACH usually clears in about four business days. Your signed cut sheet is with the ranch and goes to the butcher as soon as it does.</>
+                : <>Your signed cut sheet is with the ranch. We couldn't see your payment in Stripe yet — that can take a few minutes. {RANCH_CONTACT.name} will match it up and send your sheet on to the butcher.</>}
         </p>
         <div className="hero-actions" style={{ justifyContent: "center" }}>
           <Link to={`/track/${order.code}`} className="btn btn-ghost">Track your order</Link>
@@ -120,7 +123,7 @@ export default function Confirm() {
           <div>
             <b>Pay your balance{price ? ` of ${money(price.balance)}` : ""}.</b>{" "}
             {payUrl
-              ? <a className="btn btn-solid" href={payUrl} target="_blank" rel="noreferrer" style={{ marginLeft: 8 }}>Pay with card</a>
+              ? <><a className="btn btn-solid" href={payUrl} target="_blank" rel="noreferrer" style={{ marginLeft: 8 }}>Pay by card or bank</a><span className="small mute" style={{ display: "block", marginTop: 6 }}>Bank (ACH) has no card fee and takes a few business days to clear.</span></>
               : <>Checks are payable to {PAYABLE_TO} at pickup, or {RANCH_CONTACT.name} can take a card over the phone.</>}
           </div>
         </div>

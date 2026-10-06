@@ -52,12 +52,13 @@ const HEADERS = [
   "Share", "Total", "Deposit", "Balance", "Summary", "Notes", "Order JSON",
   "Steer", "Season",
   "Invoiced at", "Pay link id", "Pay link URL", "Confirm token",
-  "Signed by", "Signed at", "Paid at", "Butcher sent at",
+  "Signed by", "Signed at", "Paid at", "Butcher sent at", "Payment state",
 ];
 const COL_STATUS = 3, COL_STEER = 15, COL_SEASON = 16;
 /* final-invoice workflow columns (1-based) */
 const COL_INVOICED = 17, COL_PLINK_ID = 18, COL_PLINK_URL = 19, COL_TOKEN = 20,
-      COL_SIGNED_BY = 21, COL_SIGNED_AT = 22, COL_PAID_AT = 23, COL_BUTCHER_AT = 24;
+      COL_SIGNED_BY = 21, COL_SIGNED_AT = 22, COL_PAID_AT = 23, COL_BUTCHER_AT = 24,
+      COL_PAY_STATE = 25;   // "paid" | "pending" (ACH clearing) | ""
 
 const SITE_URL = "https://thunderboltbeef.com";
 const RANCH_INBOX = "thunderboltbeef@gmail.com";
@@ -191,6 +192,7 @@ function orderFromRow_(r) {
     if (r[21]) o.signedAt = dateText_(r[21]);
     if (r[22]) o.paidAt = dateText_(r[22]);
     if (r[23]) o.butcherSentAt = dateText_(r[23]);
+    if (r[24]) o.payState = String(r[24]);
     return o;
   } catch (e) {
     return null;
@@ -280,12 +282,15 @@ function doPost_(e) {
     sh.getRange(at, COL_SIGNED_BY).setValue(name);
     sh.getRange(at, COL_SIGNED_AT).setValue(now.toISOString());
 
-    /* Stripe is the judge of "paid", not the checkbox */
-    let paid = !!row[22];
-    if (!paid && row[17]) {
-      try { paid = payLinkPaid_(String(row[17])); } catch (err) { paid = false; }
-      if (paid) sh.getRange(at, COL_PAID_AT).setValue(now.toISOString());
+    /* Stripe is the judge of "paid", not the checkbox. A bank debit that
+       hasn't cleared yet is "pending" — real, but not money in hand. */
+    let state = row[22] ? "paid" : "none";
+    if (state !== "paid" && row[17]) {
+      try { state = payLinkState_(String(row[17])); } catch (err) { state = "none"; }
+      if (state === "paid") sh.getRange(at, COL_PAID_AT).setValue(now.toISOString());
     }
+    sh.getRange(at, COL_PAY_STATE).setValue(state === "none" ? "" : state);
+    const paid = state === "paid";
 
     const pdf = pdfBlob_(body.pdf, code, "signed");
     const alreadySent = !!row[23];
@@ -295,8 +300,8 @@ function doPost_(e) {
       sh.getRange(at, COL_BUTCHER_AT).setValue(now.toISOString());
       sentToButcher = true;
     }
-    notifyRanchSigned_(order, price, pdf, name, now, paid, sentToButcher || alreadySent);
-    return json_({ ok: true, paid: paid, sentToButcher: sentToButcher || alreadySent });
+    notifyRanchSigned_(order, price, pdf, name, now, state, sentToButcher || alreadySent);
+    return json_({ ok: true, paid: paid, pending: state === "pending", sentToButcher: sentToButcher || alreadySent });
   }
 
   if (body.action === "order") {
@@ -407,6 +412,7 @@ function adminPost_(body) {
         if (row[17]) deactivatePayLink_(String(row[17]));
         const link = createPayLink_(order, price, token);
         payUrl = link.url; plinkId = link.id;
+        if (!link.ach) warning = "Invoice sent with a card-only link — ACH isn't enabled on the Stripe account yet (Stripe → Settings → Payment methods → ACH Direct Debit).";
       } catch (err) {
         warning = "Invoice sent without a card link — " + (err && err.message || err);
       }
@@ -634,23 +640,35 @@ function stripe_(method, path, params) {
   return body;
 }
 
-/* A one-off Payment Link for exactly this balance. Payment Links don't
-   expire the way Checkout Sessions do, so the email stays good. */
+/* A one-off Payment Link for exactly this balance, taking card or ACH
+   bank debit. Payment Links don't expire the way Checkout Sessions do,
+   so the email stays good. If ACH isn't enabled on the Stripe account
+   yet the link is created card-only and the Ranch Office is told. */
 function createPayLink_(order, price, token) {
   const priceObj = stripe_("post", "/prices", {
     unit_amount: String(Math.round(price.balance * 100)),
     currency: "usd",
     "product_data[name]": "Thunderbolt Ranch — balance on order " + order.code + " (" + shareLabel_(order.share) + " beef)",
   });
-  const link = stripe_("post", "/payment_links", {
+  const base = {
     "line_items[0][price]": priceObj.id,
     "line_items[0][quantity]": "1",
     "metadata[order]": order.code,
     "after_completion[type]": "redirect",
     "after_completion[redirect][url]": SITE_URL + "/#/confirm/" + order.code + "?t=" + token + "&paid=1",
-  });
+  };
+  const withAch = Object.assign({ "payment_method_types[0]": "card", "payment_method_types[1]": "us_bank_account" }, base);
+  let link, ach = true;
+  try {
+    link = stripe_("post", "/payment_links", withAch);
+  } catch (err) {
+    if (!/us_bank_account|payment_method/i.test(String(err && err.message || err))) throw err;
+    link = stripe_("post", "/payment_links", base);   // card only
+    ach = false;
+  }
   return {
     id: link.id,
+    ach: ach,
     url: link.url + "?client_reference_id=" + encodeURIComponent(order.code) + "&prefilled_email=" + encodeURIComponent(order.email),
   };
 }
@@ -659,11 +677,16 @@ function deactivatePayLink_(id) {
   try { stripe_("post", "/payment_links/" + id, { active: "false" }); } catch (err) { /* already gone — fine */ }
 }
 
-/* Has anyone completed a checkout on this link? */
-function payLinkPaid_(id) {
-  if (!stripeKey_()) return false;
+/* What Stripe shows for this link: "paid", "pending" (a bank debit was
+   submitted and is still clearing — ACH takes about four business
+   days), or "none". */
+function payLinkState_(id) {
+  if (!stripeKey_()) return "none";
   const r = stripe_("get", "/checkout/sessions?payment_link=" + encodeURIComponent(id) + "&limit=20");
-  return (r.data || []).some(s => s.payment_status === "paid");
+  const d = r.data || [];
+  if (d.some(x => x.payment_status === "paid")) return "paid";
+  if (d.some(x => x.status === "complete")) return "pending";
+  return "none";
 }
 
 /* ---- the emails ---- */
@@ -689,7 +712,7 @@ function invoiceCustomer_(o, steer, price, opts) {
     ? "Ready for pickup: " + prettyDate_(steer.readyDate) + " at Colorado Custom Meat Co, 443 4th Street, Kersey CO."
     : "Pickup at Colorado Custom Meat Co, 443 4th Street, Kersey CO — we'll confirm the date.";
   const payText = opts.payUrl
-    ? "Pay by card here: " + opts.payUrl
+    ? "Pay by card or bank (ACH) here: " + opts.payUrl
     : "Pay by check to Thunderbolt Ranch LLC at pickup, or call Josh to pay by card.";
 
   const text = [
@@ -700,7 +723,7 @@ function invoiceCustomer_(o, steer, price, opts) {
     "1. REVIEW YOUR CUT SHEET — it's attached. Reply to this email with any changes before you sign.",
     "2. PAY YOUR BALANCE — " + payText,
     "3. SIGN OFF — once you've paid and the sheet is right, confirm here: " + opts.confirmUrl,
-    "   That sends your signed cut sheet to the butcher.",
+    "   That sends your signed cut sheet to the butcher. (Bank payments take a few business days to clear — your sheet goes over once it does.)",
     "",
     "QUESTIONS ABOUT CUTS?  Colorado Custom Meat Co — " + BUTCHER_PHONE,
     "Questions about your order or the bill: Josh, 402-245-8195.",
@@ -724,7 +747,7 @@ function invoiceCustomer_(o, steer, price, opts) {
     '<ol style="padding-left:20px">',
     '<li style="margin-bottom:14px"><b>Review your cut sheet</b> — it\'s attached. Reply to this email with any changes <i>before</i> you sign.</li>',
     '<li style="margin-bottom:14px"><b>Pay your balance of ' + money_(price.balance) + '.</b><br>' +
-      (opts.payUrl ? '<div style="margin:10px 0">' + btn(opts.payUrl, 'Pay ' + money_(price.balance) + ' by card', '#7a3b22') + '</div>'
+      (opts.payUrl ? '<div style="margin:10px 0">' + btn(opts.payUrl, 'Pay ' + money_(price.balance) + ' by card or bank', '#7a3b22') + '<div style="font-size:12px;color:#666;margin-top:6px">Bank (ACH) has no card fee and takes a few business days to clear.</div></div>'
                    : 'By check to Thunderbolt Ranch LLC at pickup, or call Josh to pay by card.') + '</li>',
     '<li><b>Sign off.</b> Once you\'ve paid and the sheet is right:<br><div style="margin:10px 0">' + btn(opts.confirmUrl, 'Everything looks good & I\'ve paid', '#2b2521') + '</div><span style="font-size:13px;color:#666">That sends your signed cut sheet to the butcher.</span></li>',
     '</ol>',
@@ -752,13 +775,15 @@ function invoiceCustomer_(o, steer, price, opts) {
   MailApp.sendEmail(msg);
 }
 
-function notifyRanchSigned_(o, price, pdf, name, when, paid, toButcher) {
-  const status = paid
+function notifyRanchSigned_(o, price, pdf, name, when, state, toButcher) {
+  const status = state === "paid"
     ? (toButcher ? "Paid in Stripe. Signed sheet sent to " + butcherEmail_() + "." : "Paid in Stripe.")
-    : "NO PAYMENT FOUND in Stripe yet. Sheet NOT sent to the butcher — check Stripe, then forward the attached sheet yourself.";
+    : state === "pending"
+      ? "ACH BANK PAYMENT IS PROCESSING in Stripe — usually clears in about 4 business days. Sheet NOT sent to the butcher yet; forward the attached sheet once Stripe shows it paid (or now, if you're comfortable)."
+      : "NO PAYMENT FOUND in Stripe yet. Sheet NOT sent to the butcher — check Stripe, then forward the attached sheet yourself.";
   MailApp.sendEmail({
     to: RANCH_INBOX,
-    subject: (paid ? "✓ " : "⚠ ") + "Signed cut sheet — " + o.code + " · " + o.name,
+    subject: (state === "paid" ? "✓ " : state === "pending" ? "⏳ " : "⚠ ") + "Signed cut sheet — " + o.code + " · " + o.name,
     body: [
       o.name + " signed off on order " + o.code + " (" + shareLabel_(o.share) + " beef).",
       "Signed as: " + name + " · " + when.toLocaleString(),

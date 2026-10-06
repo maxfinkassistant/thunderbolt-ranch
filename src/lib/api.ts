@@ -124,7 +124,7 @@ export async function fetchConfirm(code: string, token: string): Promise<Confirm
 }
 
 export const submitConfirm = (code: string, token: string, name: string, pdfBase64: string) =>
-  call<{ ok: true; paid: boolean; sentToButcher: boolean }>(BACKEND_URL, {
+  call<{ ok: true; paid: boolean; pending: boolean; sentToButcher: boolean }>(BACKEND_URL, {
     method: "POST", body: JSON.stringify({ action: "sign", code, t: token, name, pdf: pdfBase64 }),
   });
 

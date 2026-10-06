@@ -116,6 +116,7 @@ export interface Order {
   signedAt?: string;
   paidAt?: string;
   butcherSentAt?: string;
+  payState?: "paid" | "pending";   // what Stripe showed when they signed
 }
 
 /* ---------------- steers + season (back office) ---------------- */

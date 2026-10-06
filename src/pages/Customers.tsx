@@ -562,7 +562,8 @@ export default function Customers() {
                         {o.invoicedAt && <span className="admin-chip">invoiced {fmtDate(o.invoicedAt)}</span>}
                         {o.signedAt && <span className="admin-chip done">signed · {o.signedBy}</span>}
                         {o.paidAt && <span className="admin-chip done">paid</span>}
-                        {o.signedAt && !o.paidAt && <span className="admin-chip hot">no payment found</span>}
+                        {o.signedAt && !o.paidAt && o.payState === "pending" && <span className="admin-chip">ACH clearing</span>}
+                        {o.signedAt && !o.paidAt && o.payState !== "pending" && <span className="admin-chip hot">no payment found</span>}
                         {o.butcherSentAt && <span className="admin-chip done">sent to CCMC</span>}
                       </span>
                     )}

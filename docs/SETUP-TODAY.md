@@ -83,9 +83,15 @@ Stripe **secret** key in the script — never in the site.
    - `STRIPE_SECRET_KEY` = the key
    - `BUTCHER_EMAIL` = **your own address** for the first run, then change it to
      `order@ccmeatco.com` (leave it unset and it defaults to Colorado Custom).
-3. Redeploy (Manage deployments → pencil → New version → Deploy).
+3. **Turn on ACH**: Stripe → Settings → Payment methods → **ACH Direct Debit** → enable.
+   Without it the invoice link is card-only and the Ranch Office says so.
+4. Redeploy (Manage deployments → pencil → New version → Deploy).
 
 Nothing in the site bundle ever sees the key; only `Code.gs` reads it.
+
+ACH takes about four business days to clear. A customer who pays by bank and signs
+right away shows as **⏳ ACH clearing** — the sheet stays with you until Stripe shows it
+paid, then forward it (or forward it early if you're comfortable).
 
 ### Sending a final invoice — and what happens after
 
