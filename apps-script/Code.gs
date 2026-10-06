@@ -44,6 +44,9 @@ const SHARE_FRAC = { quarter: 0.25, half: 0.5, whole: 1 };
 const DEPOSIT = 250;          // flat, every share size
 const HANGING_TYP = 1000;     // lb, a typical carcass — above this counts as heavy
 const PATTY_RATE = 0.5;       // $/lb — the butcher's patty charge, collected by us and passed on
+/* Card payments carry the processor's fee; bank (ACH) payments don't.
+   One number, shown to the customer as "includes a 3% card fee". */
+const CARD_FEE_PCT = 0.03;
 const PATTY_MIN_LBS = 30;
 
 const SHEET_NAME = "Orders";
@@ -53,12 +56,14 @@ const HEADERS = [
   "Steer", "Season",
   "Invoiced at", "Pay link id", "Pay link URL", "Confirm token",
   "Signed by", "Signed at", "Paid at", "Butcher sent at", "Payment state",
+  "Card link id", "Card link URL",
 ];
 const COL_STATUS = 3, COL_STEER = 15, COL_SEASON = 16;
 /* final-invoice workflow columns (1-based) */
 const COL_INVOICED = 17, COL_PLINK_ID = 18, COL_PLINK_URL = 19, COL_TOKEN = 20,
       COL_SIGNED_BY = 21, COL_SIGNED_AT = 22, COL_PAID_AT = 23, COL_BUTCHER_AT = 24,
-      COL_PAY_STATE = 25;   // "paid" | "pending" (ACH clearing) | ""
+      COL_PAY_STATE = 25,   // "paid" | "pending" (ACH clearing) | ""
+      COL_CARD_ID = 26, COL_CARD_URL = 27;   // the card link (+fee); 18/19 are the ACH link
 
 const SITE_URL = "https://thunderboltbeef.com";
 const RANCH_INBOX = "thunderboltbeef@gmail.com";
@@ -228,7 +233,11 @@ function doGet_(e) {
     const out = { ok: true, order: order, butcherPhone: BUTCHER_PHONE, paid: !!row[22] };
     const pricing = publicPricing_(steerFor_(order));
     if (pricing) out.pricing = pricing;
-    if (row[18]) out.payUrl = String(row[18]);
+    if (row[18]) out.payUrl = String(row[18]);          // bank (ACH), at the balance
+    if (row[26]) out.cardUrl = String(row[26]);         // card, balance + fee
+    out.cardFeePct = CARD_FEE_PCT;
+    const price = priceFor_(order, steerFor_(order));
+    if (price) out.cardAmount = cardAmount_(price.balance);
     return json_(out);
   }
   if (q.action === "list") {
@@ -285,8 +294,8 @@ function doPost_(e) {
     /* Stripe is the judge of "paid", not the checkbox. A bank debit that
        hasn't cleared yet is "pending" — real, but not money in hand. */
     let state = row[22] ? "paid" : "none";
-    if (state !== "paid" && row[17]) {
-      try { state = payLinkState_(String(row[17])); } catch (err) { state = "none"; }
+    if (state !== "paid" && (row[17] || row[25])) {
+      try { state = payLinkState_([String(row[17] || ""), String(row[25] || "")]); } catch (err) { state = "none"; }
       if (state === "paid") sh.getRange(at, COL_PAID_AT).setValue(now.toISOString());
     }
     sh.getRange(at, COL_PAY_STATE).setValue(state === "none" ? "" : state);
@@ -406,28 +415,32 @@ function adminPost_(body) {
 
     /* a fresh Stripe link for exactly this balance; retire the old one so
        a stale amount can't be paid */
-    let payUrl = "", plinkId = "", warning = "";
+    let achUrl = "", achId = "", cardUrl = "", cardId = "", warning = "";
     if (stripeKey_()) {
       try {
         if (row[17]) deactivatePayLink_(String(row[17]));
-        const link = createPayLink_(order, price, token);
-        payUrl = link.url; plinkId = link.id;
-        if (!link.ach) warning = "Invoice sent with a card-only link — ACH isn't enabled on the Stripe account yet (Stripe → Settings → Payment methods → ACH Direct Debit).";
+        if (row[25]) deactivatePayLink_(String(row[25]));
+        const links = createPayLinks_(order, price, token);
+        if (links.ach) { achUrl = links.ach.url; achId = links.ach.id; }
+        cardUrl = links.card.url; cardId = links.card.id;
+        if (!links.achAvailable) warning = "Invoice sent with a card link only — ACH isn't enabled on the Stripe account yet (Stripe → Settings → Payment methods → ACH Direct Debit).";
       } catch (err) {
-        warning = "Invoice sent without a card link — " + (err && err.message || err);
+        warning = "Invoice sent without payment links — " + (err && err.message || err);
       }
     } else {
-      warning = "Invoice sent without a card link: STRIPE_SECRET_KEY isn't set in Script Properties.";
+      warning = "Invoice sent without payment links: STRIPE_SECRET_KEY isn't set in Script Properties.";
     }
 
     sh.getRange(at, COL_INVOICED).setValue(new Date().toISOString());
-    sh.getRange(at, COL_PLINK_ID).setValue(plinkId);
-    sh.getRange(at, COL_PLINK_URL).setValue(payUrl);
+    sh.getRange(at, COL_PLINK_ID).setValue(achId);
+    sh.getRange(at, COL_PLINK_URL).setValue(achUrl);
     sh.getRange(at, COL_TOKEN).setNumberFormat("@").setValue(token);
+    sh.getRange(at, COL_CARD_ID).setValue(cardId);
+    sh.getRange(at, COL_CARD_URL).setValue(cardUrl);
 
     const pdf = body.pdf ? pdfBlob_(body.pdf, code) : null;
-    invoiceCustomer_(order, steer, price, { payUrl: payUrl, confirmUrl: confirmUrl, pdf: pdf });
-    const out = { ok: true, payUrl: payUrl };
+    invoiceCustomer_(order, steer, price, { achUrl: achUrl, cardUrl: cardUrl, confirmUrl: confirmUrl, pdf: pdf });
+    const out = { ok: true, payUrl: achUrl || cardUrl };
     if (warning) out.warning = warning;
     return json_(out);
   }
@@ -640,53 +653,64 @@ function stripe_(method, path, params) {
   return body;
 }
 
-/* A one-off Payment Link for exactly this balance, taking card or ACH
-   bank debit. Payment Links don't expire the way Checkout Sessions do,
-   so the email stays good. If ACH isn't enabled on the Stripe account
-   yet the link is created card-only and the Ranch Office is told. */
-function createPayLink_(order, price, token) {
+/* Two one-off Payment Links per invoice: bank (ACH) at the balance,
+   and card at the balance plus the card fee. Payment Links don't expire
+   the way Checkout Sessions do, so the email stays good. If ACH isn't
+   enabled on the Stripe account yet only the card link is made and the
+   Ranch Office is told. */
+function cardAmount_(balance) { return Math.round(balance * (1 + CARD_FEE_PCT)); }
+
+function makeLink_(order, amountDollars, label, method, token) {
   const priceObj = stripe_("post", "/prices", {
-    unit_amount: String(Math.round(price.balance * 100)),
+    unit_amount: String(Math.round(amountDollars * 100)),
     currency: "usd",
-    "product_data[name]": "Thunderbolt Ranch — balance on order " + order.code + " (" + shareLabel_(order.share) + " beef)",
+    "product_data[name]": "Thunderbolt Ranch — " + label + ", order " + order.code + " (" + shareLabel_(order.share) + " beef)",
   });
-  const base = {
+  const link = stripe_("post", "/payment_links", {
     "line_items[0][price]": priceObj.id,
     "line_items[0][quantity]": "1",
+    "payment_method_types[0]": method,
     "metadata[order]": order.code,
+    "metadata[method]": method,
     "after_completion[type]": "redirect",
     "after_completion[redirect][url]": SITE_URL + "/#/confirm/" + order.code + "?t=" + token + "&paid=1",
-  };
-  const withAch = Object.assign({ "payment_method_types[0]": "card", "payment_method_types[1]": "us_bank_account" }, base);
-  let link, ach = true;
-  try {
-    link = stripe_("post", "/payment_links", withAch);
-  } catch (err) {
-    if (!/us_bank_account|payment_method/i.test(String(err && err.message || err))) throw err;
-    link = stripe_("post", "/payment_links", base);   // card only
-    ach = false;
-  }
+  });
   return {
     id: link.id,
-    ach: ach,
     url: link.url + "?client_reference_id=" + encodeURIComponent(order.code) + "&prefilled_email=" + encodeURIComponent(order.email),
   };
+}
+
+function createPayLinks_(order, price, token) {
+  const out = { ach: null, card: null, achAvailable: true };
+  try {
+    out.ach = makeLink_(order, price.balance, "balance by bank", "us_bank_account", token);
+  } catch (err) {
+    if (!/us_bank_account|payment_method/i.test(String(err && err.message || err))) throw err;
+    out.achAvailable = false;
+  }
+  out.card = makeLink_(order, cardAmount_(price.balance), "balance by card incl. " + Math.round(CARD_FEE_PCT * 100) + "% card fee", "card", token);
+  return out;
 }
 
 function deactivatePayLink_(id) {
   try { stripe_("post", "/payment_links/" + id, { active: "false" }); } catch (err) { /* already gone — fine */ }
 }
 
-/* What Stripe shows for this link: "paid", "pending" (a bank debit was
-   submitted and is still clearing — ACH takes about four business
-   days), or "none". */
-function payLinkState_(id) {
+/* What Stripe shows across this order's links: "paid", "pending" (a
+   bank debit was submitted and is still clearing — ACH takes about
+   four business days), or "none". */
+function payLinkState_(ids) {
   if (!stripeKey_()) return "none";
-  const r = stripe_("get", "/checkout/sessions?payment_link=" + encodeURIComponent(id) + "&limit=20");
-  const d = r.data || [];
-  if (d.some(x => x.payment_status === "paid")) return "paid";
-  if (d.some(x => x.status === "complete")) return "pending";
-  return "none";
+  let pending = false;
+  for (let i = 0; i < ids.length; i++) {
+    if (!ids[i]) continue;
+    const r = stripe_("get", "/checkout/sessions?payment_link=" + encodeURIComponent(ids[i]) + "&limit=20");
+    const d = r.data || [];
+    if (d.some(x => x.payment_status === "paid")) return "paid";
+    if (d.some(x => x.status === "complete")) pending = true;
+  }
+  return pending ? "pending" : "none";
 }
 
 /* ---- the emails ---- */
@@ -711,9 +735,14 @@ function invoiceCustomer_(o, steer, price, opts) {
   const readyLine = steer.readyDate
     ? "Ready for pickup: " + prettyDate_(steer.readyDate) + " at Colorado Custom Meat Co, 443 4th Street, Kersey CO."
     : "Pickup at Colorado Custom Meat Co, 443 4th Street, Kersey CO — we'll confirm the date.";
-  const payText = opts.payUrl
-    ? "Pay by card or bank (ACH) here: " + opts.payUrl
-    : "Pay by check to Thunderbolt Ranch LLC at pickup, or call Josh to pay by card.";
+  const feePct = Math.round(CARD_FEE_PCT * 100) + "%";
+  const cardAmt = cardAmount_(price.balance);
+  const payText = (opts.achUrl || opts.cardUrl)
+    ? [
+        opts.achUrl ? "   By bank (ACH), " + money_(price.balance) + ", no fee: " + opts.achUrl : "",
+        opts.cardUrl ? "   By card, " + money_(cardAmt) + " (includes a " + feePct + " card fee): " + opts.cardUrl : "",
+      ].filter(Boolean).join("\n")
+    : "   By check to Thunderbolt Ranch LLC at pickup.";
 
   const text = [
     "Hi " + first + ",",
@@ -721,7 +750,8 @@ function invoiceCustomer_(o, steer, price, opts) {
     "Your " + shareLabel_(o.share).toLowerCase() + " beef is cut and weighed. Three things, in order:",
     "",
     "1. REVIEW YOUR CUT SHEET — it's attached. Reply to this email with any changes before you sign.",
-    "2. PAY YOUR BALANCE — " + payText,
+    "2. PAY YOUR BALANCE of " + money_(price.balance) + ":",
+    payText,
     "3. SIGN OFF — once you've paid and the sheet is right, confirm here: " + opts.confirmUrl,
     "   That sends your signed cut sheet to the butcher. (Bank payments take a few business days to clear — your sheet goes over once it does.)",
     "",
@@ -747,8 +777,12 @@ function invoiceCustomer_(o, steer, price, opts) {
     '<ol style="padding-left:20px">',
     '<li style="margin-bottom:14px"><b>Review your cut sheet</b> — it\'s attached. Reply to this email with any changes <i>before</i> you sign.</li>',
     '<li style="margin-bottom:14px"><b>Pay your balance of ' + money_(price.balance) + '.</b><br>' +
-      (opts.payUrl ? '<div style="margin:10px 0">' + btn(opts.payUrl, 'Pay ' + money_(price.balance) + ' by card or bank', '#7a3b22') + '<div style="font-size:12px;color:#666;margin-top:6px">Bank (ACH) has no card fee and takes a few business days to clear.</div></div>'
-                   : 'By check to Thunderbolt Ranch LLC at pickup, or call Josh to pay by card.') + '</li>',
+      ((opts.achUrl || opts.cardUrl)
+        ? '<div style="margin:10px 0">'
+          + (opts.achUrl ? btn(opts.achUrl, 'Pay ' + money_(price.balance) + ' by bank — no fee', '#7a3b22') + '<div style="font-size:12px;color:#666;margin:6px 0 12px">Bank (ACH) takes a few business days to clear.</div>' : '')
+          + (opts.cardUrl ? btn(opts.cardUrl, 'Pay ' + money_(cardAmt) + ' by card', '#5a5047') + '<div style="font-size:12px;color:#666;margin-top:6px">Includes a ' + feePct + ' card fee (' + money_(cardAmt - price.balance) + ').</div>' : '')
+          + '</div>'
+        : 'By check to Thunderbolt Ranch LLC at pickup.') + '</li>',
     '<li><b>Sign off.</b> Once you\'ve paid and the sheet is right:<br><div style="margin:10px 0">' + btn(opts.confirmUrl, 'Everything looks good & I\'ve paid', '#2b2521') + '</div><span style="font-size:13px;color:#666">That sends your signed cut sheet to the butcher.</span></li>',
     '</ol>',
     '<div style="margin:22px 0;padding:16px 18px;background:#f3ecd8;border-left:4px solid #b08d45;font-family:Helvetica,Arial,sans-serif">',

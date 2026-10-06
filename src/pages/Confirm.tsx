@@ -48,7 +48,7 @@ export default function Confirm() {
     return <main className="page confirm-wrap"><p className="mute">Opening your order…</p></main>;
   }
 
-  const { order, pricing, payUrl } = view;
+  const { order, pricing, payUrl, cardUrl, cardAmount, cardFeePct } = view;
   const steer: Steer | undefined = pricing
     ? { id: pricing.steerId ?? order.steer ?? "", season: seasonOf(order).id, hangingWeight: pricing.hangingWeight, rate: pricing.rate, readyDate: pricing.readyDate, killDate: pricing.killDate }
     : undefined;
@@ -121,10 +121,25 @@ export default function Confirm() {
         <div className="confirm-step">
           <span className="confirm-num">2</span>
           <div>
-            <b>Pay your balance{price ? ` of ${money(price.balance)}` : ""}.</b>{" "}
-            {payUrl
-              ? <><a className="btn btn-solid" href={payUrl} target="_blank" rel="noreferrer" style={{ marginLeft: 8 }}>Pay by card or bank</a><span className="small mute" style={{ display: "block", marginTop: 6 }}>Bank (ACH) has no card fee and takes a few business days to clear.</span></>
-              : <>Checks are payable to {PAYABLE_TO} at pickup, or {RANCH_CONTACT.name} can take a card over the phone.</>}
+            <b>Pay your balance{price ? ` of ${money(price.balance)}` : ""}.</b>
+            {(payUrl || cardUrl) ? (
+              <div className="pay-choices">
+                {payUrl && (
+                  <div>
+                    <a className="btn btn-solid" href={payUrl} target="_blank" rel="noreferrer">Pay {price ? money(price.balance) : ""} by bank — no fee</a>
+                    <span className="small mute">Bank (ACH) takes a few business days to clear.</span>
+                  </div>
+                )}
+                {cardUrl && (
+                  <div>
+                    <a className="btn btn-ghost" href={cardUrl} target="_blank" rel="noreferrer">Pay {cardAmount ? money(cardAmount) : ""} by card</a>
+                    <span className="small mute">Includes a {Math.round((cardFeePct ?? 0.03) * 100)}% card fee{price && cardAmount ? ` (${money(cardAmount - price.balance)})` : ""}.</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <> Checks are payable to {PAYABLE_TO} at pickup, or {RANCH_CONTACT.name} can take a card over the phone.</>
+            )}
           </div>
         </div>
         <div className="confirm-step">

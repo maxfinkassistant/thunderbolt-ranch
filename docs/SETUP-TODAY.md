@@ -89,6 +89,10 @@ Stripe **secret** key in the script — never in the site.
 
 Nothing in the site bundle ever sees the key; only `Code.gs` reads it.
 
+Card payments carry a 3% fee (`CARD_FEE_PCT` in `Code.gs`); bank payments don't. The
+customer gets two buttons — the balance by bank, or the balance + 3% by card — and the
+fee is spelled out next to the card button.
+
 ACH takes about four business days to clear. A customer who pays by bank and signs
 right away shows as **⏳ ACH clearing** — the sheet stays with you until Stripe shows it
 paid, then forward it (or forward it early if you're comfortable).

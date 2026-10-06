@@ -109,7 +109,10 @@ export const sendInvoice = (adminKey: string, code: string, pdfBase64: string) =
 export interface ConfirmView {
   order: Order;
   pricing?: PublicPricing;
-  payUrl?: string;
+  payUrl?: string;       // bank (ACH), at the balance
+  cardUrl?: string;      // card, balance + fee
+  cardAmount?: number;
+  cardFeePct?: number;
   butcherPhone: string;
   paid: boolean;
 }
@@ -120,7 +123,7 @@ export async function fetchConfirm(code: string, token: string): Promise<Confirm
   const r = await call<{ ok: boolean } & ConfirmView>(
     `${BACKEND_URL}?action=confirm&code=${encodeURIComponent(code)}&t=${encodeURIComponent(token)}`,
   );
-  return { order: r.order, pricing: r.pricing, payUrl: r.payUrl, butcherPhone: r.butcherPhone, paid: !!r.paid };
+  return { order: r.order, pricing: r.pricing, payUrl: r.payUrl, cardUrl: r.cardUrl, cardAmount: r.cardAmount, cardFeePct: r.cardFeePct, butcherPhone: r.butcherPhone, paid: !!r.paid };
 }
 
 export const submitConfirm = (code: string, token: string, name: string, pdfBase64: string) =>
