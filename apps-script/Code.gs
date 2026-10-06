@@ -260,6 +260,45 @@ function doPost_(e) {
     return adminPost_(body);
   }
 
+  /* public, token-gated — the customer signed off from their email link */
+  if (body.action === "sign") {
+    /* public, token-gated: the customer signed and says they've paid */
+    const code = String(body.code || "").toUpperCase();
+    const at = orderRow_(code);
+    if (at < 0) return json_({ ok: false, error: "no order " + code });
+    const sh = sheet_();
+    const row = sh.getRange(at, 1, 1, HEADERS.length).getValues()[0];
+    if (!tokenOk_(row, body.t)) return json_({ ok: false, error: "that link isn't valid" });
+    const name = String(body.name || "").trim();
+    if (!name) return json_({ ok: false, error: "name required" });
+    if (!body.pdf) return json_({ ok: false, error: "signed sheet missing" });
+    const order = orderFromRow_(row);
+    const steer = steerFor_(order);
+    const price = priceFor_(order, steer);
+    const now = new Date();
+
+    sh.getRange(at, COL_SIGNED_BY).setValue(name);
+    sh.getRange(at, COL_SIGNED_AT).setValue(now.toISOString());
+
+    /* Stripe is the judge of "paid", not the checkbox */
+    let paid = !!row[22];
+    if (!paid && row[17]) {
+      try { paid = payLinkPaid_(String(row[17])); } catch (err) { paid = false; }
+      if (paid) sh.getRange(at, COL_PAID_AT).setValue(now.toISOString());
+    }
+
+    const pdf = pdfBlob_(body.pdf, code, "signed");
+    const alreadySent = !!row[23];
+    let sentToButcher = false;
+    if (paid && !alreadySent) {
+      sendToButcher_(order, steer, price, pdf, name, now);
+      sh.getRange(at, COL_BUTCHER_AT).setValue(now.toISOString());
+      sentToButcher = true;
+    }
+    notifyRanchSigned_(order, price, pdf, name, now, paid, sentToButcher || alreadySent);
+    return json_({ ok: true, paid: paid, sentToButcher: sentToButcher || alreadySent });
+  }
+
   if (body.action === "order") {
     const o = body.order;
     if (!o || !o.code || !o.email) return json_({ ok: false, error: "missing order" });
@@ -387,43 +426,6 @@ function adminPost_(body) {
     return json_(out);
   }
 
-  if (body.action === "sign") {
-    /* public, token-gated: the customer signed and says they've paid */
-    const code = String(body.code || "").toUpperCase();
-    const at = orderRow_(code);
-    if (at < 0) return json_({ ok: false, error: "no order " + code });
-    const sh = sheet_();
-    const row = sh.getRange(at, 1, 1, HEADERS.length).getValues()[0];
-    if (!tokenOk_(row, body.t)) return json_({ ok: false, error: "that link isn't valid" });
-    const name = String(body.name || "").trim();
-    if (!name) return json_({ ok: false, error: "name required" });
-    if (!body.pdf) return json_({ ok: false, error: "signed sheet missing" });
-    const order = orderFromRow_(row);
-    const steer = steerFor_(order);
-    const price = priceFor_(order, steer);
-    const now = new Date();
-
-    sh.getRange(at, COL_SIGNED_BY).setValue(name);
-    sh.getRange(at, COL_SIGNED_AT).setValue(now.toISOString());
-
-    /* Stripe is the judge of "paid", not the checkbox */
-    let paid = !!row[22];
-    if (!paid && row[17]) {
-      try { paid = payLinkPaid_(String(row[17])); } catch (err) { paid = false; }
-      if (paid) sh.getRange(at, COL_PAID_AT).setValue(now.toISOString());
-    }
-
-    const pdf = pdfBlob_(body.pdf, code, "signed");
-    const alreadySent = !!row[23];
-    let sentToButcher = false;
-    if (paid && !alreadySent) {
-      sendToButcher_(order, steer, price, pdf, name, now);
-      sh.getRange(at, COL_BUTCHER_AT).setValue(now.toISOString());
-      sentToButcher = true;
-    }
-    notifyRanchSigned_(order, price, pdf, name, now, paid, sentToButcher || alreadySent);
-    return json_({ ok: true, paid: paid, sentToButcher: sentToButcher || alreadySent });
-  }
 
   if (body.action === "settings") {
     const capacity = Math.round(Number(body.capacity));
