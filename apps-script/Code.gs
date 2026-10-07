@@ -579,7 +579,7 @@ function confirmCustomer_(o, summary, cost, depositLink) {
   const trackUrl = SITE_URL + "/#/track/" + o.code;
   const steps = [
     ["This " + season.name, "Harvest. Your beef dry-ages 14 days at Colorado Custom Meat Co in Kersey."],
-    ["After the hang", "Cut and packaged to your cut sheet. You can adjust it until your steer goes to the butcher — just text Josh."],
+    ["After the hang", "Cut and packaged to your cut sheet. You can adjust it until your steer goes to the butcher — just reply to this email."],
     ["Once weighed", "You get an invoice email with your filled-out cut sheet and your exact balance. Pay it by bank (no fee) or card from the link, then sign off — that sends your sheet to the butcher."],
     ["Pickup, " + season.pickup, "Colorado Custom, 443 4th Street, Kersey CO. We'll confirm the date. It comes out frozen, vacuum-sealed and boxed — just leave room in the vehicle."],
   ];
@@ -602,7 +602,7 @@ function confirmCustomer_(o, summary, cost, depositLink) {
     summary,
     "",
     "Track your order any time: " + trackUrl,
-    "Questions? Call or text Josh — 402-245-8195, or reply to this email.",
+    "Questions? Reply to this email, or write thunderboltbeef@gmail.com.",
     "",
     "— Thunderbolt Ranch · Ranch to Table",
   ]);
@@ -628,7 +628,7 @@ function confirmCustomer_(o, summary, cost, depositLink) {
     '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#7a6333;margin:22px 0 8px">Your cut sheet</div>',
     '<pre style="font-family:Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6;background:#f7f3ea;border:1px solid #e6e0d4;border-radius:4px;padding:14px;white-space:pre-wrap;margin:0">' + esc_(summary) + '</pre>',
     '<p style="margin:22px 0 0;font-family:Helvetica,Arial,sans-serif;font-size:14px">' + btn(trackUrl, 'Track your order', '#7a3b22') + '</p>',
-    '<p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#555">Questions? Call or text Josh — 402-245-8195, or just reply to this email.</p>',
+    '<p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#555">Questions? Just reply to this email.</p>',
     '<p style="color:#888;font-size:13px">— Thunderbolt Ranch · Ranch to Table</p>',
     '</div>',
   ]).join("");
@@ -778,7 +778,7 @@ function invoiceCustomer_(o, steer, price, opts) {
         opts.achUrl ? "   By bank (ACH), " + money_(price.balance) + ", no fee: " + opts.achUrl : "",
         opts.cardUrl ? "   By card, " + money_(cardAmt) + " (includes a " + feePct + " card fee): " + opts.cardUrl : "",
       ].filter(Boolean).join("\n")
-    : "   No pay link yet — call or text Josh, 402-245-8195, to pay by bank or card.";
+    : "   No pay link yet — reply to this email and we'll sort payment by bank or card.";
 
   const text = [
     "Hi " + first + ",",
@@ -792,7 +792,7 @@ function invoiceCustomer_(o, steer, price, opts) {
     "   That sends your signed cut sheet to the butcher. (Bank payments take a few business days to clear — your sheet goes over once it does.)",
     "",
     "QUESTIONS ABOUT CUTS?  Colorado Custom Meat Co — " + BUTCHER_PHONE,
-    "Questions about your order or the bill: Josh, 402-245-8195.",
+    "Questions about your order or the bill: reply to this email.",
     "",
     "YOUR ANIMAL",
     "Steer: " + (o.steer || "—") + "   Hanging weight: " + price.hangingLbs + " lb   Your share: " + price.shareLbs + " lb",
@@ -818,13 +818,13 @@ function invoiceCustomer_(o, steer, price, opts) {
           + (opts.achUrl ? btn(opts.achUrl, 'Pay ' + money_(price.balance) + ' by bank — no fee', '#7a3b22') + '<div style="font-size:12px;color:#666;margin:6px 0 12px">Bank (ACH) takes a few business days to clear.</div>' : '')
           + (opts.cardUrl ? btn(opts.cardUrl, 'Pay ' + money_(cardAmt) + ' by card', '#5a5047') + '<div style="font-size:12px;color:#666;margin-top:6px">Includes a ' + feePct + ' card fee (' + money_(cardAmt - price.balance) + ').</div>' : '')
           + '</div>'
-        : 'No pay link yet — call or text Josh, 402-245-8195, to pay by bank or card.') + '</li>',
+        : 'No pay link yet — reply to this email and we\'ll sort payment by bank or card.') + '</li>',
     '<li><b>Sign off.</b> Once you\'ve paid and the sheet is right:<br><div style="margin:10px 0">' + btn(opts.confirmUrl, 'Everything looks good & I\'ve paid', '#2b2521') + '</div><span style="font-size:13px;color:#666">That sends your signed cut sheet to the butcher.</span></li>',
     '</ol>',
     '<div style="margin:22px 0;padding:16px 18px;background:#f3ecd8;border-left:4px solid #b08d45;font-family:Helvetica,Arial,sans-serif">',
     '<div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#7a6333">Questions about cuts?</div>',
     '<div style="font-size:20px;margin-top:4px"><b>Colorado Custom Meat Co — <a href="tel:' + BUTCHER_PHONE + '" style="color:#2b2521">' + BUTCHER_PHONE + '</a></b></div>',
-    '<div style="font-size:13px;color:#555;margin-top:4px">Questions about your order or the bill: Josh, 402-245-8195.</div>',
+    '<div style="font-size:13px;color:#555;margin-top:4px">Questions about your order or the bill: just reply to this email.</div>',
     '</div>',
     '<table style="border-collapse:collapse;font-family:Helvetica,Arial,sans-serif;font-size:14px;width:100%">',
     '<tr><td style="padding:6px 0;color:#666">Steer ' + esc_(o.steer || '—') + ' · ' + price.hangingLbs + ' lb hanging · your share ' + price.shareLbs + ' lb</td><td></td></tr>',
@@ -882,7 +882,7 @@ function sendToButcher_(o, steer, price, pdf, name, when) {
       "Customer: " + o.name + " · " + o.phone + " · " + o.email,
       "Signed by customer: " + name + ", " + when.toLocaleDateString(),
       "",
-      "Questions — Josh, Thunderbolt Ranch, 402-245-8195.",
+      "Questions — Thunderbolt Ranch, thunderboltbeef@gmail.com (reply to this email).",
     ].join("\n"),
     name: "Thunderbolt Ranch",
     replyTo: RANCH_INBOX,

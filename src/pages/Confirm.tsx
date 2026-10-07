@@ -40,7 +40,7 @@ export default function Confirm() {
       <main className="page confirm-wrap">
         <h2 className="d">We couldn't open that.</h2>
         <p className="mute" style={{ marginTop: "var(--space-md)" }}>{error}</p>
-        <p className="small mute" style={{ marginTop: "var(--space-md)" }}>Call or text {RANCH_CONTACT.name} — {RANCH_CONTACT.phone}.</p>
+        <p className="small mute" style={{ marginTop: "var(--space-md)" }}>Email {RANCH_CONTACT.email}.</p>
       </main>
     );
   }
@@ -138,7 +138,7 @@ export default function Confirm() {
                 )}
               </div>
             ) : (
-              <> No pay link on this order yet — call or text {RANCH_CONTACT.name} at {RANCH_CONTACT.phone} to pay by bank or card.</>
+              <> No pay link on this order yet — email {RANCH_CONTACT.email} and we'll sort payment by bank or card.</>
             )}
           </div>
         </div>
@@ -152,7 +152,7 @@ export default function Confirm() {
         <span className="tag">Questions about cuts?</span>
         <p>
           The people cutting your beef are the best ones to ask. <b>{PROCESSOR.name} — <a href={`tel:${PROCESSOR.phone}`}>{PROCESSOR.phone}</a></b>.
-          Questions about your order or the bill: {RANCH_CONTACT.name}, {RANCH_CONTACT.phone}.
+          Questions about your order or the bill: {RANCH_CONTACT.email}.
         </p>
       </div>
 

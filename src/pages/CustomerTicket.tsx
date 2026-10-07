@@ -158,7 +158,7 @@ export default function CustomerTicket() {
       )}
 
       <p className="small mute" style={{ marginTop: "var(--space-md)" }}>
-        Ranch questions: {RANCH_CONTACT.name}, {RANCH_CONTACT.phone}.{" "}
+        Ranch questions: {RANCH_CONTACT.email}.{" "}
         {price === null
           ? "Balance is estimated on typical weights — final number follows the animal's actual hanging weight."
           : `Balance is figured on this steer's actual hanging weight at ${money2(price.rate)}/lb.`}

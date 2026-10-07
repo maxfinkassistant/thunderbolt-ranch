@@ -78,7 +78,7 @@ export default function Order() {
         setPlacing(false);
         setPlaceError(
           `We couldn't reach the ranch's order system (${(err as Error).message}). ` +
-          `Your order isn't lost — text Josh at ${RANCH_CONTACT.phone} with code ${order.code}, or try again.`,
+          `Your order isn't lost — email ${RANCH_CONTACT.email} with code ${order.code}, or try again.`,
         );
         return;
       }
@@ -127,8 +127,8 @@ export default function Order() {
           <div className="group-note" style={{ marginTop: "var(--space-lg)", textAlign: "left" }}>
             <span className="tag">Deposit</span>
             <span>
-              {RANCH_CONTACT.name} will reach out to collect your {money(DEPOSIT)} deposit — or call/text
-              him at {RANCH_CONTACT.phone} with order code <strong className="mono">{placed.code}</strong>.
+              {RANCH_CONTACT.name} will reach out to collect your {money(DEPOSIT)} deposit — or email
+              {RANCH_CONTACT.email} with order code <strong className="mono">{placed.code}</strong>.
             </span>
           </div>
         )}
@@ -315,7 +315,7 @@ export default function Order() {
                 {STRIPE_PAYMENT_LINK
                   ? "Next: secure card payment through Stripe."
                   : `${RANCH_CONTACT.name} will collect your deposit after you reserve.`}{" "}
-                Questions? Call or text {RANCH_CONTACT.name}: {RANCH_CONTACT.phone}.
+                Questions? Email {RANCH_CONTACT.email}.
               </p>
             </div>
 
@@ -617,7 +617,7 @@ export default function Order() {
             talk it through with them directly. Have your order code handy.
           </p>
           <p className="small mute" style={{ marginTop: "var(--space-xs)" }}>
-            Your notes ride along on your cut sheet, and {RANCH_CONTACT.name} sees them too — {RANCH_CONTACT.phone}.
+            Your notes ride along on your cut sheet, and the ranch sees them too — {RANCH_CONTACT.email}.
           </p>
         </div>
       </>

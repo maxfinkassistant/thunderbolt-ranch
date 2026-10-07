@@ -170,7 +170,7 @@ export default function Track() {
           {order.status === "reserved" && (
             <div className="group-note" style={{ marginTop: "var(--space-sm)", marginBottom: 0 }}>
               <span className="tag">Held</span>
-              <span>Your cut sheet can be adjusted until <strong>your steer goes to the butcher</strong>. Call or text Josh at 402-245-8195.</span>
+              <span>Your cut sheet can be adjusted until <strong>your steer goes to the butcher</strong>. Email {RANCH_CONTACT.email}.</span>
             </div>
           )}
         </div>
@@ -253,7 +253,7 @@ export default function Track() {
           <p className="owed-fine">
             One payment of {money(price.balance)} to {PAYABLE_TO} — pay it from the link in your invoice email, by bank (no fee) or card, before pickup.{" "}
             {price.pattyCharge > 0 && <>{PATTY_BILLING_NOTE}{" "}</>}
-            Questions about any of it — call or text {RANCH_CONTACT.name} at {RANCH_CONTACT.phone}.
+            Questions about any of it — email {RANCH_CONTACT.email}.
           </p>
         </div>
       )}

@@ -24,7 +24,7 @@
 - One harvest: kill Sept 16 → 14-day hang → pickup week of Oct 1 at Colorado Custom, Kersey
 - **Order deadline Sept 30** — every campaign counts down to this one real date
 - Pickup only; no processing fees, no hidden costs
-- Contact: call or text Josh, 402-245-8195
+- Contact: call or text Josh, thunderboltbeef@gmail.com
 
 ## 3. Audiences
 

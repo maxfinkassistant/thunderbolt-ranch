@@ -218,7 +218,7 @@ export default function HowItWorks() {
           </div>
           <div>
             <span className="tag">Questions?</span>
-            <p>Call or text {RANCH_CONTACT.name} — {RANCH_CONTACT.phone}.</p>
+            <p>Email us — <a href={`mailto:${RANCH_CONTACT.email}`}>{RANCH_CONTACT.email}</a>.</p>
             <p className="dim">Happy to talk cuts, freezer space, or which size fits your family.</p>
           </div>
         </div>
