@@ -45,7 +45,7 @@ const SHARE_FRAC = { quarter: 0.25, half: 0.5, whole: 1 };
 /* $/lb hanging by share. A group that fills more of a steer together
    unlocks the bigger share's rate for everyone in it. Mirrors
    SHARE_RATES / GROUP_UNLOCK / tierFor in src/data/config.ts. */
-const SHARE_RATES = { whole: 6.0, half: 6.15, quarter: 6.25 };
+const SHARE_RATES = { whole: 6.0, half: 6.10, quarter: 6.20 };
 const GROUP_UNLOCK = { half: 1, whole: 3 };     // friends beyond you
 const TIER_ORDER = ["quarter", "half", "whole"];
 function groupTier_(size) { return size >= GROUP_UNLOCK.whole + 1 ? "whole" : size >= GROUP_UNLOCK.half + 1 ? "half" : "quarter"; }

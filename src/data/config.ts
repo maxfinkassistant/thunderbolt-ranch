@@ -14,7 +14,7 @@ export type ShareId = "quarter" | "half" | "whole";
    rate for everyone in it — see GROUP_UNLOCK. The ranch can still set
    a lower whole-share rate on a heavy steer; halves and quarters sit
    their usual step above it. */
-export const SHARE_RATES: Record<ShareId, number> = { whole: 6.0, half: 6.15, quarter: 6.25 };
+export const SHARE_RATES: Record<ShareId, number> = { whole: 6.0, half: 6.10, quarter: 6.20 };
 export const HANGING_RATE = SHARE_RATES.whole;    // the headline "from" rate
 export const TAKEHOME_RATE_EST = 8.57;            // whole-share take-home estimate, the "from" figure
 export const DEPOSIT = 300;                       // flat, all share sizes, card

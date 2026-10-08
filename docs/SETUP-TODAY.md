@@ -81,9 +81,9 @@ counts toward the front-page tracker, so delete the test rows first.
   hand if someone pays another way.
 - **The dashboard Payment Link** (`VITE_STRIPE_PAYMENT_LINK`) is now only a fallback if
   the script can't make a link. **Change it to $300 in Stripe** so the fallback is right.
-- **Rates:** whole $6.00 · half $6.15 · quarter $6.25 per lb hanging. A steer's
+- **Rates:** whole $6.00 · half $6.10 · quarter $6.20 per lb hanging. A steer's
   "Price per lb" in the Steers tab is its *whole-share* rate; halves and quarters sit
-  their usual +$0.15 / +$0.25 above it.
+  their usual +$0.10 / +$0.20 above it.
 - **Groups:** every order code is a referral code. A friend entering it at checkout
   joins the group; 1 friend → everyone pays the half rate, 3 friends → the whole rate.
   Rates are applied at invoice time to orders whose deposit is in.
