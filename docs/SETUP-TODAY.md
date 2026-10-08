@@ -89,6 +89,17 @@ Stripe **secret** key in the script — never in the site.
    Advanced → Go to Thunderbolt Orders → Allow. Without this every Stripe call fails
    with *"You do not have permission to call UrlFetchApp.fetch"* — pasting and
    redeploying never asks for this permission on its own.
+
+   **If the prompt never appears** and Run just errors, or the "Click here to provide
+   permissions" link opens a *"Sorry, unable to open the file"* page with `authuser=N`
+   in the address:
+   - You're signed into several Google accounts. Open a **private/incognito window**,
+     sign in as thunderboltbeef@gmail.com *only*, open script.google.com → Thunderbolt
+     Orders, and Run `authorizeStripe` from there.
+   - If it still errors without prompting, the manifest pins the permissions. Gear →
+     tick **Show "appsscript.json" manifest file in editor** → open `appsscript.json`
+     → replace it with `apps-script/appsscript.json` from this repo → Save → Run
+     `authorizeStripe` again. The prompt will appear.
 4. **Turn on ACH**: Stripe → Settings → Payment methods → **ACH Direct Debit** → enable.
    Without it the invoice link is card-only and the Ranch Office says so.
 5. Redeploy (Manage deployments → pencil → New version → Deploy).
