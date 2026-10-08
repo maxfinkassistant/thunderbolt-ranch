@@ -83,9 +83,15 @@ Stripe **secret** key in the script — never in the site.
    - `STRIPE_SECRET_KEY` = the key
    - `BUTCHER_EMAIL` = **your own address** for the first run, then change it to
      `order@ccmeatco.com` (leave it unset and it defaults to Colorado Custom).
-3. **Turn on ACH**: Stripe → Settings → Payment methods → **ACH Direct Debit** → enable.
+3. **Grant the script internet access** (one time): in the editor, open the function
+   dropdown next to ▶ Run, choose **`authorizeStripe`**, press **Run**. Google pops
+   "Authorization required" → Review permissions → pick thunderboltbeef@gmail.com →
+   Advanced → Go to Thunderbolt Orders → Allow. Without this every Stripe call fails
+   with *"You do not have permission to call UrlFetchApp.fetch"* — pasting and
+   redeploying never asks for this permission on its own.
+4. **Turn on ACH**: Stripe → Settings → Payment methods → **ACH Direct Debit** → enable.
    Without it the invoice link is card-only and the Ranch Office says so.
-4. Redeploy (Manage deployments → pencil → New version → Deploy).
+5. Redeploy (Manage deployments → pencil → New version → Deploy).
 
 Nothing in the site bundle ever sees the key; only `Code.gs` reads it.
 

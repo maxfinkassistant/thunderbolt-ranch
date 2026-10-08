@@ -699,6 +699,23 @@ function pdfBlob_(b64, code, tag) {
 
 function stripeKey_() { return String(props_().getProperty("STRIPE_SECRET_KEY") || "").trim(); }
 
+/* RUN THIS ONCE FROM THE EDITOR after pasting a version that talks to
+   Stripe: pick `authorizeStripe` in the function dropdown and press
+   Run. Google then asks for the "connect to an external service"
+   permission (UrlFetchApp) — a redeploy alone never prompts for it,
+   which is why Test Stripe can fail with "You do not have permission
+   to call UrlFetchApp.fetch" even with a good key. */
+function authorizeStripe() {
+  const key = stripeKey_();
+  if (!key) { Logger.log("STRIPE_SECRET_KEY isn't set in Script Properties yet."); return; }
+  const r = UrlFetchApp.fetch("https://api.stripe.com/v1/balance", {
+    headers: { Authorization: "Bearer " + key }, muteHttpExceptions: true,
+  });
+  Logger.log(r.getResponseCode() === 200
+    ? "Authorized, and Stripe accepted the key. Press Test Stripe in the Ranch Office."
+    : "Authorized (the call went out), but Stripe answered " + r.getResponseCode() + ": " + r.getContentText().slice(0, 240));
+}
+
 function stripe_(method, path, params) {
   const opts = { method: method, headers: { Authorization: "Bearer " + stripeKey_() }, muteHttpExceptions: true };
   if (params) { opts.payload = params; opts.contentType = "application/x-www-form-urlencoded"; }
