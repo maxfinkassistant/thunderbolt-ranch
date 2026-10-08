@@ -1549,3 +1549,40 @@ h3.d { font-size: 1.4rem; }
 
 .admin-table tr.row-pending td { opacity: 0.6; }
 .admin-table tr.row-pending td:first-child { opacity: 1; }
+
+/* ---------------- Ranch Office: use the width it's got ----------------
+   Seven (roster) or eight (steers) columns of selects, inputs and chips
+   don't fit the 1060px reading column; let the office stretch to the
+   window, size each table's columns, and keep chips inside their cell. */
+.order-main.office { max-width: 1600px; }
+.office .admin-table th, .office .admin-table td { padding: 10px 10px; }
+.office .admin-table td.mono:first-child { white-space: nowrap; }   /* only the order code */
+.office .roster td.mono:not(:first-child) { white-space: normal; }
+.office .roster td .admin-chip { display: block; width: fit-content; }
+.office .admin-select { padding: 7px 8px; font-size: 0.85rem; max-width: 100%; }
+.office .admin-input { max-width: 100%; }
+.office .admin-table .admin-chip { display: inline-block; max-width: 100%; white-space: normal; line-height: 1.35; }
+.office .flow-chips { max-width: 100%; }
+@media (min-width: 1200px) {
+  .office .admin-table.roster, .office .admin-table.steers { table-layout: fixed; }
+  .office .admin-table.roster td, .office .admin-table.steers td { overflow-wrap: anywhere; }
+  /* roster: order · customer · share · harvest & steer · total · status · actions */
+  .office .roster th:nth-child(1) { width: 11%; }
+  .office .roster th:nth-child(2) { width: 19%; }
+  .office .roster th:nth-child(3) { width: 9%; }
+  .office .roster th:nth-child(4) { width: 15%; }
+  .office .roster th:nth-child(5) { width: 16%; }
+  .office .roster th:nth-child(6) { width: 14%; }
+  .office .roster th:nth-child(7) { width: 16%; }
+  /* steers: id · harvest · hanging · $/lb · kill date · ready date · orders · save */
+  .office .steers th:nth-child(1) { width: 11%; }
+  .office .steers th:nth-child(2) { width: 13%; }
+  .office .steers th:nth-child(3) { width: 10%; }
+  .office .steers th:nth-child(4) { width: 12%; }
+  .office .steers th:nth-child(5) { width: 13%; }
+  .office .steers th:nth-child(6) { width: 13%; }
+  .office .steers th:nth-child(7) { width: 16%; }
+  .office .steers th:nth-child(8) { width: 12%; }
+  .office .steers .admin-input, .office .steers .admin-select { width: 100%; }
+  .office .steers input[type="date"] { padding: 7px 6px; font-size: 0.8rem; }
+}

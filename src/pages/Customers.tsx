@@ -192,15 +192,17 @@ function SteerRow({
           </>
         )}
       </td>
-      <td style={{ whiteSpace: "nowrap" }}>
-        <button className="btn btn-ghost" disabled={busy || !id || clash || weightBad || rateBad || !dirty} onClick={save}>
-          {busy ? "Saving…" : steer ? "Save" : "Add steer"}
-        </button>
-        {onRemove && (
-          <button className="small" style={{ textDecoration: "underline", marginLeft: 12 }} onClick={onRemove}>
-            Remove
+      <td>
+        <div className="row-actions">
+          <button className="btn btn-ghost" disabled={busy || !id || clash || weightBad || rateBad || !dirty} onClick={save}>
+            {busy ? "Saving…" : steer ? "Save" : "Add steer"}
           </button>
-        )}
+          {onRemove && (
+            <button className="small" style={{ textDecoration: "underline" }} onClick={onRemove}>
+              Remove
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -440,7 +442,7 @@ export default function Customers() {
   );
 
   return (
-    <main className="page order-main" style={{ maxWidth: 1100 }}>
+    <main className="page order-main office">
       <div className="admin-bar">
         <div>
           <div className="tag" style={{ color: "var(--rust)" }}>Back office · {SEASONS[CURRENT_SEASON].label}</div>
@@ -487,7 +489,7 @@ export default function Customers() {
 
       {tab === "roster" && (
         <div className="admin-table-wrap">
-          <table className="admin-table">
+          <table className="admin-table roster">
             <thead>
               <tr>
                 <th>Order</th><th>Customer</th><th>Share</th><th>Harvest &amp; steer</th><th>Total</th><th>Status</th><th></th>
@@ -637,7 +639,7 @@ export default function Customers() {
           </div>
 
           <div className="admin-table-wrap">
-            <table className="admin-table">
+            <table className="admin-table steers">
               <thead>
                 <tr>
                   <th>Steer ID</th><th>Harvest</th><th>Hanging weight</th><th>Price per lb</th><th>Kill date</th><th>Est. ready date</th><th>Orders</th><th></th>
