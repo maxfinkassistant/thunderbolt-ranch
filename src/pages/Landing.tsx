@@ -13,6 +13,10 @@ import {
 
 const SAMPLE_CODE = "TR-SAMPLE1";
 
+/* quarters it takes to reach each group tier, minus the organizer */
+const friendsToHalf = Math.round(GROUP_UNLOCK.half / SHARES.quarter.frac) - 1;
+const friendsToWhole = Math.round(GROUP_UNLOCK.whole / SHARES.quarter.frac) - 1;
+
 export default function Landing() {
   const [active, setActive] = useState("chuck");
   const [openPrimal, setOpenPrimal] = useState<string | null>(null);
@@ -298,7 +302,7 @@ export default function Landing() {
           <div className="split-band">
             <div>
               <span className="tag">Split a steer with friends</span>
-              <h3 className="d" style={{ marginTop: "var(--space-xs)" }}>Bring {GROUP_UNLOCK.half} friend and you both pay the half rate. Bring {GROUP_UNLOCK.whole} and it's the whole rate.</h3>
+              <h3 className="d" style={{ marginTop: "var(--space-xs)" }}>Bring {friendsToHalf} friend and you both pay the half rate. Bring {friendsToWhole} and it's the whole rate.</h3>
               <p className="small">
                 Every order comes with a code. Friends enter it at checkout and join your group — four quarters
                 ordered together pay {money2(SHARE_RATES.whole)}/lb, same as one family buying the whole animal.
@@ -307,8 +311,8 @@ export default function Landing() {
             </div>
             <div className="split-steps">
               <div><b>Just you</b><span>{money2(SHARE_RATES.quarter)}/lb on a quarter</span></div>
-              <div><b>+{GROUP_UNLOCK.half} friend</b><span>{money2(SHARE_RATES.half)}/lb for both</span></div>
-              <div><b>+{GROUP_UNLOCK.whole} friends</b><span>{money2(SHARE_RATES.whole)}/lb for all four</span></div>
+              <div><b>+{friendsToHalf} friend</b><span>{money2(SHARE_RATES.half)}/lb for both</span></div>
+              <div><b>+{friendsToWhole} friends</b><span>{money2(SHARE_RATES.whole)}/lb for all four</span></div>
             </div>
           </div>
           <div style={{ marginTop: "var(--space-lg)", display: "flex", gap: "var(--space-md)", alignItems: "center", flexWrap: "wrap" }}>
