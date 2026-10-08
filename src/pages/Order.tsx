@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  SHARES, DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST, PROCESSOR,
+  SHARES, DEPOSIT, HANGING_RATE, PROCESSOR, SHARE_RATES, GROUP_UNLOCK, takehomeRate,
   SEASONS, CURRENT_SEASON, NEXT_SEASON, seasonOf,
   MAIN_CUTS, EXTRA_GROUPS, RIB_CHOICES, LOIN_CHOICES,
   RIB_YIELD, RIB_ROAST_LBS, TBONE_YIELD, STRIP_YIELD, FILET_YIELD,
@@ -16,7 +16,6 @@ import SteerTracker from "../components/SteerTracker";
 import { defaultCutSheet, createOrder, updateOrder, type Order as OrderRow, type CutSheetAnswers } from "../lib/store";
 import { useAvailability, refreshAvailability, seasonFor, seasonFull, steersLeft, steerCount } from "../lib/availability";
 import { boxSummary, groundEstimate, looseGround, shareCost } from "../lib/estimate";
-import { downloadCutSheet } from "../lib/cutsheetPdf";
 import { backendConfigured, submitOrder } from "../lib/api";
 import { STRIPE_PAYMENT_LINK } from "../data/config";
 
@@ -43,8 +42,9 @@ export default function Order() {
   const [q, setQ] = useState(-1);           // -1 = share pick, QUESTIONS.length = review
   const [a, setA] = useState<CutSheetAnswers>(defaultCutSheet);
   const [who, setWho] = useState({ name: "", email: "", phone: "", address: "" });
-  const [placed, setPlaced] = useState<OrderRow | null>(null);
-  const [pdfBusy, setPdfBusy] = useState(false);
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const [referral, setReferral] = useState(() => (params.get("ref") ?? "").toUpperCase());
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
   const availability = useAvailability();
@@ -58,10 +58,14 @@ export default function Order() {
   const place = async () => {
     setPlacing(true);
     setPlaceError(null);
-    /* fall while the share still fits, winter once it doesn't; the
-       order system has the final say since it sees every order */
-    let order = createOrder({ share: share!, cutSheet: a, season: seasonFor(availability, share!), ...who });
-    if (backendConfigured()) {
+    const live = backendConfigured();
+    /* saved first so the cut sheet can't be lost; counts as reserved only
+       once the deposit is seen. Demo mode has no Stripe, so it books. */
+    let order = createOrder(
+      { share: share!, cutSheet: a, season: seasonFor(availability, share!), referral: referral.trim() || undefined, ...who },
+      live ? "pending-deposit" : "reserved",
+    );
+    if (live) {
       try {
         const cost = shareCost(share!);
         const res = await submitOrder({
@@ -69,11 +73,14 @@ export default function Order() {
           summary: boxSummary(a, share!),
           cost: { total: cost.total, deposit: cost.deposit, balance: cost.balance },
           depositLink: depositUrl(order.code, order.email),
+          referral: referral.trim() || undefined,
         });
         if (res.season && res.season !== order.season) {
           updateOrder(order.code, { season: res.season });
           order = { ...order, season: res.season };
         }
+        const to = res.depositUrl || depositUrl(order.code, order.email);
+        if (to) { window.location.assign(to); return; }   // Stripe brings them back to /order/confirmed/CODE
       } catch (err) {
         setPlacing(false);
         setPlaceError(
@@ -85,84 +92,8 @@ export default function Order() {
     }
     refreshAvailability();
     setPlacing(false);
-    setPlaced(order);
-    window.scrollTo({ top: 0 });
+    navigate(`/order/confirmed/${order.code}`);
   };
-
-  /* ============ CONFIRMATION ============ */
-  if (placed) {
-    const season = seasonOf(placed);
-    const rolled = season.id !== CURRENT_SEASON;
-    return (
-      <main className="page confirm-wrap">
-        <div className="tag" style={{ color: "var(--rust)", marginBottom: "var(--space-md)" }}>Reserved · {season.label}</div>
-        <h2 className="d" style={{ fontSize: "clamp(2.2rem,5vw,3.2rem)" }}>
-          {rolled ? `Your beef is booked for ${season.name}.` : "Your beef is booked."}
-        </h2>
-        {rolled && (
-          <p style={{ marginTop: "var(--space-md)", color: "var(--ink-2)" }}>
-            Our {SEASONS[CURRENT_SEASON].name} harvest doesn't have a {SHARES[placed.share].label.toLowerCase()} left,
-            so your share is reserved from our {season.name} harvest — pickup {season.pickupText}.
-          </p>
-        )}
-        <p style={{ marginTop: "var(--space-md)", color: "var(--ink-2)" }}>
-          Order <strong className="mono">{placed.code}</strong>
-          {backendConfigured()
-            ? <> — a confirmation is on its way to {placed.email}.</>
-            : <> — save this code.</>}
-        </p>
-
-        {STRIPE_PAYMENT_LINK ? (
-          <div className="pay-panel" style={{ marginTop: "var(--space-lg)", textAlign: "left" }}>
-            <span className="tag">One more step</span>
-            <p className="small" style={{ marginBottom: "var(--space-md)" }}>
-              Your share is held once the {money(DEPOSIT)} deposit is in. Card payment is secure through Stripe;
-              your order code travels with it so we can match it up.
-            </p>
-            <a className="btn btn-on-dark btn-wide" href={depositUrl(placed.code, placed.email)} target="_blank" rel="noreferrer">
-              Pay {money(DEPOSIT)} deposit now
-            </a>
-          </div>
-        ) : (
-          <div className="group-note" style={{ marginTop: "var(--space-lg)", textAlign: "left" }}>
-            <span className="tag">Deposit</span>
-            <span>
-              {RANCH_CONTACT.name} will reach out to collect your {money(DEPOSIT)} deposit — or email
-              {RANCH_CONTACT.email} with order code <strong className="mono">{placed.code}</strong>.
-            </span>
-          </div>
-        )}
-
-        <div className="next-steps">
-          {[
-            ["Now", `Your ${money(DEPOSIT)} deposit holds your ${SHARES[placed.share].label.toLowerCase()}. You can adjust your cut sheet until your steer goes to the butcher.`],
-            [`This ${season.name}`, "Harvest. Your beef dry-ages 14 days at Colorado Custom in Kersey."],
-            ["After the hang", "Cut and packaged to your exact cut sheet, vacuum sealed and labeled."],
-            ["Once weighed", "You'll get an invoice email with your filled-out cut sheet and your exact balance. Pay it by bank (no fee) or card from the link, then sign off — that sends your cut sheet to the butcher."],
-            [season.pickup, `Pickup in Kersey — we'll confirm the date. About ${SHARES[placed.share].takehome} lb, frozen and boxed, so leave room in the vehicle. Your balance will already be invoiced and paid by then.`],
-          ].map(([k, v]) => (
-            <div className="next-step" key={k}>
-              <div className="when">{k}</div>
-              <div className="what">{v}</div>
-            </div>
-          ))}
-        </div>
-        <div className="hero-actions" style={{ justifyContent: "center" }}>
-          <button
-            className="btn btn-solid"
-            disabled={pdfBusy}
-            onClick={async () => { setPdfBusy(true); try { await downloadCutSheet(placed); } finally { setPdfBusy(false); } }}
-          >
-            {pdfBusy ? "Building PDF…" : "Download your cut sheet (PDF)"}
-          </button>
-          <Link className="btn btn-ghost" to={`/track/${placed.code}`}>Track this order</Link>
-        </div>
-        <p className="small mute" style={{ marginTop: "var(--space-md)" }}>
-          That's the actual Colorado Custom cutting-instructions form, filled out from your answers.
-        </p>
-      </main>
-    );
-  }
 
   /* ============ SHARE PICK ============ */
   if (q === -1) {
@@ -181,8 +112,8 @@ export default function Order() {
           </div>
           <h2 className="d">How much beef?</h2>
           <p>
-            One price for every share: {money2(HANGING_RATE)}/lb hanging weight —
-            about {money2(TAKEHOME_RATE_EST)}/lb in your freezer. {money(DEPOSIT)} deposit
+            From {money2(HANGING_RATE)}/lb hanging weight — {money2(SHARE_RATES.quarter)} for a quarter,
+            {" "}{money2(SHARE_RATES.half)} a half, {money2(SHARE_RATES.whole)} a whole. {money(DEPOSIT)} deposit
             holds it; the balance is invoiced once your beef is weighed.
           </p>
         </div>
@@ -202,6 +133,7 @@ export default function Order() {
                   {money(s.total)}<sup>*</sup>
                 </div>
                 <div className="share-specs">
+                  <span>{money2(SHARE_RATES[s.id])}/LB HANGING · ≈ {money2(takehomeRate(s.id))}/LB TAKE-HOME</span>
                   <span>≈ {s.takehome} LBS TAKE-HOME<sup>*</sup></span>
                   <span className="hot">FREEZER {s.freezer}</span>
                 </div>
@@ -226,9 +158,17 @@ export default function Order() {
           </div>
         )}
 
+        <div className="group-note" style={{ marginBottom: "var(--space-lg)" }}>
+          <span className="tag">Split a steer</span>
+          <span>
+            Ordering with friends? Everyone in the group pays less: <b>{GROUP_UNLOCK.half} friend</b> and you all get the
+            half-steer rate, {money2(SHARE_RATES.half)}/lb; <b>{GROUP_UNLOCK.whole} friends</b> and it's the whole-steer rate,
+            {" "}{money2(SHARE_RATES.whole)}/lb. Enter a friend's code at checkout, or share yours after.
+          </span>
+        </div>
         <p className="small mute measure" style={{ marginBottom: "var(--space-lg)" }}>
           <sup>*</sup>Estimates based on a typical {LIVE_TYP.toLocaleString()} lb animal (about {HANGING_TYP.toLocaleString()} lb hanging) — yours may run
-          somewhat above or below these figures, and you pay {money2(HANGING_RATE)}/lb on its
+          somewhat above or below these figures, and you pay your share's rate on its
           real hanging weight. Next: a short walk-through builds your custom cut sheet, one
           question at a time, with a photo and a plain-English explanation for every cut.
         </p>
@@ -280,7 +220,7 @@ export default function Order() {
                 <b>{money(cost.deposit)}</b>
               </div>
               <div className="pay-row">
-                <span>Balance, invoiced once weighed<span className="sub">{cost.hangingLbs} lb hanging × {money2(HANGING_RATE)}/lb − deposit</span></span>
+                <span>Balance, invoiced once weighed<span className="sub">{cost.hangingLbs} lb hanging × {money2(cost.rate)}/lb − deposit</span></span>
                 <b>{money(cost.balance)}</b>
               </div>
               <div className="pay-row total">
@@ -288,7 +228,7 @@ export default function Order() {
                 <b>{money(cost.total)}</b>
               </div>
               <p className="pay-fine">
-                Cutting, wrapping and freezing are included — about {money2(TAKEHOME_RATE_EST)}/lb in
+                Cutting, wrapping and freezing are included — about {money2(takehomeRate(share!))}/lb in
                 your freezer, with no processing fees on top. Once your beef is weighed you'll get an invoice with a link to pay by bank or card.
                 Pickup at {PROCESSOR.name}, Kersey.
               </p>
@@ -307,14 +247,18 @@ export default function Order() {
                     onChange={(e) => setWho({ ...who, [k]: e.target.value })} />
                 </div>
               ))}
+              <div className="field">
+                <label htmlFor="o-ref">Friend's code (optional)</label>
+                <input id="o-ref" value={referral} placeholder="TR-______" className="mono"
+                  onChange={(e) => setReferral(e.target.value.toUpperCase())} />
+                <span className="small mute">Ordering with someone? Their code puts you in their group and everyone pays less.</span>
+              </div>
               <button className="btn btn-dark btn-wide" disabled={placing || !who.name || !who.email || !who.phone} onClick={place}>
-                {placing ? "Reserving…" : `Reserve & pay ${money(DEPOSIT)} deposit`}
+                {placing ? "Saving…" : `Pay ${money(DEPOSIT)} deposit & reserve`}
               </button>
               {placeError && <p className="small" style={{ color: "var(--rust)" }}>{placeError}</p>}
               <p className="small mute" style={{ textAlign: "center" }}>
-                {STRIPE_PAYMENT_LINK
-                  ? "Next: secure card payment through Stripe."
-                  : `${RANCH_CONTACT.name} will collect your deposit after you reserve.`}{" "}
+                Next: secure card payment through Stripe. Your share is held the moment it clears.{" "}
                 Questions? Email {RANCH_CONTACT.email}.
               </p>
             </div>

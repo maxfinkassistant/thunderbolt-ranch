@@ -33,15 +33,24 @@
  */
 
 /* Seasons — keep in step with SEASONS in the site's src/data/config.ts. */
-const CURRENT_SEASON = "fall-2026";
-const NEXT_SEASON = "winter-2027";
+const CURRENT_SEASON = "winter-2027";
+const NEXT_SEASON = "spring-2027";
 const SEASON_COPY = {
   "fall-2026": { name: "fall", pickup: "estimated mid-October" },
   "winter-2027": { name: "winter", pickup: "estimated January" },
+  "spring-2027": { name: "spring", pickup: "estimated April" },
 };
-const DEFAULT_CAPACITY = 7;   // steers this season, until the Ranch Office says otherwise
+const DEFAULT_CAPACITY = 20;  // steers this season, until the Ranch Office says otherwise
 const SHARE_FRAC = { quarter: 0.25, half: 0.5, whole: 1 };
-const DEPOSIT = 250;          // flat, every share size
+/* $/lb hanging by share. A group that fills more of a steer together
+   unlocks the bigger share's rate for everyone in it. Mirrors
+   SHARE_RATES / GROUP_UNLOCK / tierFor in src/data/config.ts. */
+const SHARE_RATES = { whole: 6.0, half: 6.15, quarter: 6.25 };
+const GROUP_UNLOCK = { half: 1, whole: 3 };     // friends beyond you
+const TIER_ORDER = ["quarter", "half", "whole"];
+function groupTier_(size) { return size >= GROUP_UNLOCK.whole + 1 ? "whole" : size >= GROUP_UNLOCK.half + 1 ? "half" : "quarter"; }
+function tierFor_(share, size) { const g = groupTier_(size || 1); return TIER_ORDER.indexOf(g) > TIER_ORDER.indexOf(share) ? g : share; }
+const DEPOSIT = 500;          // flat, every share size, card
 const HANGING_TYP = 1000;     // lb, a typical carcass — above this counts as heavy
 const PATTY_RATE = 0.5;       // $/lb — the butcher's patty charge, collected by us and passed on
 /* Card payments carry the processor's fee; bank (ACH) payments don't.
@@ -57,13 +66,15 @@ const HEADERS = [
   "Invoiced at", "Pay link id", "Pay link URL", "Confirm token",
   "Signed by", "Signed at", "Paid at", "Butcher sent at", "Payment state",
   "Card link id", "Card link URL",
+  "Referral", "Group", "Deposit link id", "Deposit link URL", "Deposit paid at",
 ];
 const COL_STATUS = 3, COL_STEER = 15, COL_SEASON = 16;
 /* final-invoice workflow columns (1-based) */
 const COL_INVOICED = 17, COL_PLINK_ID = 18, COL_PLINK_URL = 19, COL_TOKEN = 20,
       COL_SIGNED_BY = 21, COL_SIGNED_AT = 22, COL_PAID_AT = 23, COL_BUTCHER_AT = 24,
       COL_PAY_STATE = 25,   // "paid" | "pending" (ACH clearing) | ""
-      COL_CARD_ID = 26, COL_CARD_URL = 27;   // the card link (+fee); 18/19 are the ACH link
+      COL_CARD_ID = 26, COL_CARD_URL = 27,   // the card link (+fee); 18/19 are the ACH link
+      COL_REFERRAL = 28, COL_GROUP = 29, COL_DEP_ID = 30, COL_DEP_URL = 31, COL_DEP_PAID = 32;
 
 const SITE_URL = "https://thunderboltbeef.com";
 const RANCH_INBOX = "thunderboltbeef@gmail.com";
@@ -74,7 +85,7 @@ function butcherEmail_() { return String(props_().getProperty("BUTCHER_EMAIL") |
 
 const STEER_SHEET = "Steers";
 const STEER_HEADERS = ["Steer ID", "Season", "Hanging weight (lb)", "Est. ready date", "Price per lb ($)", "Kill date"];
-const STANDARD_RATE = 6.0;   // $/lb hanging, unless a steer says otherwise
+const STANDARD_RATE = SHARE_RATES.whole;   // the whole-share rate; a steer's "rate" is a whole-share rate
 
 function props_() { return PropertiesService.getScriptProperties(); }
 
@@ -169,10 +180,22 @@ function settings_() {
 function availability_() {
   const s = settings_();
   const online = rows_().map(orderFromRow_).filter(Boolean)
-    .filter(o => o.season === CURRENT_SEASON)
+    .filter(o => o.season === CURRENT_SEASON && o.status !== "pending-deposit")
     .reduce((t, o) => t + (SHARE_FRAC[o.share] || 0), 0);
   return { season: CURRENT_SEASON, capacity: s.capacity, reserved: online + s.offline };
 }
+
+/* Confirmed orders per group, keyed by the group's root code. */
+function groupSizes_(orders) {
+  const sizes = {};
+  (orders || rows_().map(orderFromRow_).filter(Boolean)).forEach(o => {
+    if (o.status === "pending-deposit") return;
+    const root = o.group || o.code;
+    sizes[root] = (sizes[root] || 0) + 1;
+  });
+  return sizes;
+}
+function groupSizeOf_(order, sizes) { return (sizes || groupSizes_())[order.group || order.code] || 1; }
 
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
@@ -198,6 +221,9 @@ function orderFromRow_(r) {
     if (r[22]) o.paidAt = dateText_(r[22]);
     if (r[23]) o.butcherSentAt = dateText_(r[23]);
     if (r[24]) o.payState = String(r[24]);
+    if (r[27]) o.referral = String(r[27]);
+    o.group = String(r[28] || "").trim() || o.code;
+    if (r[31]) o.depositPaidAt = dateText_(r[31]);
     return o;
   } catch (e) {
     return null;
@@ -217,10 +243,42 @@ function doGet_(e) {
     const row = rows_().find(r => String(r[0]).toUpperCase() === code);
     const order = row ? orderFromRow_(row) : null;
     /* their own animal's weight and rate — never the whole roster */
+    if (order) {
+      order.groupSize = groupSizeOf_(order);
+      if (order.status === "pending-deposit" && row[30]) order.depositUrl = String(row[30]);
+    }
     const out = { ok: true, order: order };
     const pricing = order ? publicPricing_(steerFor_(order)) : null;
     if (pricing) out.pricing = pricing;
     return json_(out);
+  }
+  if (q.action === "deposit" && q.code) {
+    /* Has the deposit landed? Stripe is asked; if yes the order flips to
+       reserved and the confirmation goes out. Safe to call repeatedly. */
+    const code = String(q.code).toUpperCase();
+    const at = orderRow_(code);
+    if (at < 0) return json_({ ok: false, error: "no order " + code });
+    const sh = sheet_();
+    const row = sh.getRange(at, 1, 1, HEADERS.length).getValues()[0];
+    const order = orderFromRow_(row);
+    if (order.status !== "pending-deposit") {
+      order.groupSize = groupSizeOf_(order);
+      return json_({ ok: true, paid: true, order: order });
+    }
+    let paid = false;
+    if (row[29] && stripeKey_()) {
+      try { paid = payLinkState_([String(row[29])]) === "paid"; } catch (err) { paid = false; }
+    }
+    if (!paid) return json_({ ok: true, paid: false, order: order, depositUrl: String(row[30] || "") });
+    sh.getRange(at, COL_STATUS).setValue("reserved");
+    sh.getRange(at, COL_DEP_PAID).setValue(new Date().toISOString());
+    order.status = "reserved";
+    order.groupSize = groupSizeOf_(order);
+    const summary = String(row[11] || "");
+    const cost = { total: row[8], deposit: row[9], balance: row[10] };
+    try { notifyRanch_(order, summary, cost); } catch (err) { /* don't fail the customer for a ranch email */ }
+    try { confirmCustomer_(order, summary, cost, null, true); } catch (err) { /* ditto */ }
+    return json_({ ok: true, paid: true, order: order });
   }
   if (q.action === "confirm" && q.code) {
     /* the page behind the "looks good & I've paid" button — only with
@@ -230,13 +288,14 @@ function doGet_(e) {
     if (!row) return json_({ ok: false, error: "no order " + code });
     if (!tokenOk_(row, q.t)) return json_({ ok: false, error: "that link isn't valid — open it from your invoice email" });
     const order = orderFromRow_(row);
+    order.groupSize = groupSizeOf_(order);
     const out = { ok: true, order: order, butcherPhone: BUTCHER_PHONE, paid: !!row[22] };
     const pricing = publicPricing_(steerFor_(order));
     if (pricing) out.pricing = pricing;
     if (row[18]) out.payUrl = String(row[18]);          // bank (ACH), at the balance
     if (row[26]) out.cardUrl = String(row[26]);         // card, balance + fee
     out.cardFeePct = CARD_FEE_PCT;
-    const price = priceFor_(order, steerFor_(order));
+    const price = priceFor_(order, steerFor_(order), order.groupSize);
     if (price) out.cardAmount = cardAmount_(price.balance);
     return json_(out);
   }
@@ -244,7 +303,7 @@ function doGet_(e) {
     if (!isAdmin_(q.key)) return json_({ ok: false, error: "bad key" });
     return json_({
       ok: true,
-      orders: rows_().map(orderFromRow_).filter(Boolean),
+      orders: (function () { const all = rows_().map(orderFromRow_).filter(Boolean); const sizes = groupSizes_(all); all.forEach(o => { o.groupSize = groupSizeOf_(o, sizes); }); return all; })(),
       steers: steers_(),
       settings: settings_(),
     });
@@ -284,8 +343,9 @@ function doPost_(e) {
     if (!name) return json_({ ok: false, error: "name required" });
     if (!body.pdf) return json_({ ok: false, error: "signed sheet missing" });
     const order = orderFromRow_(row);
+    order.groupSize = groupSizeOf_(order);
     const steer = steerFor_(order);
-    const price = priceFor_(order, steer);
+    const price = priceFor_(order, steer, order.groupSize);
     const now = new Date();
 
     sh.getRange(at, COL_SIGNED_BY).setValue(name);
@@ -322,17 +382,41 @@ function doPost_(e) {
     /* this season while the share still fits in what's left, otherwise the next */
     const a = availability_();
     o.season = a.reserved + (SHARE_FRAC[o.share] || 0) <= a.capacity + 1e-6 ? CURRENT_SEASON : NEXT_SEASON;
+
+    /* a friend's code puts this order in their group (chains collapse
+       onto the same root); otherwise it starts its own */
+    let referral = String(body.referral || o.referral || "").trim().toUpperCase();
+    let group = o.code;
+    if (referral) {
+      const refRow = rows_().find(r => String(r[0]).toUpperCase() === referral);
+      if (refRow) { const ref = orderFromRow_(refRow); group = ref.group || ref.code; }
+      else referral = "";
+    }
+
+    /* the deposit: a card-only Stripe link for exactly DEPOSIT that
+       brings them back to the site. Saved as pending until it's paid. */
+    let depId = "", depUrl = "";
+    if (stripeKey_()) {
+      try {
+        const link = makeLink_(o, DEPOSIT, "deposit", "card", SITE_URL + "/#/order/confirmed/" + o.code + "?paid=1");
+        depId = link.id; depUrl = link.url;
+      } catch (err) { depUrl = String(body.depositLink || ""); }
+    } else {
+      depUrl = String(body.depositLink || "");
+    }
+
     sheet_().appendRow([
-      o.code, new Date(o.createdAt || Date.now()), o.status || "reserved",
+      o.code, new Date(o.createdAt || Date.now()), "pending-deposit",
       o.name, o.email, o.phone, o.address,
       o.share, cost.total, cost.deposit, cost.balance,
       summary, (o.cutSheet && o.cutSheet.notes) || "", JSON.stringify(o),
       "", o.season,
+      "", "", "", "", "", "", "", "", "", "", "",
+      referral, group, depId, depUrl, "",
     ]);
     const emailErrors = [];
-    try { notifyRanch_(o, summary, cost); } catch (err) { emailErrors.push("ranch: " + (err && err.message || err)); }
-    try { confirmCustomer_(o, summary, cost, body.depositLink); } catch (err) { emailErrors.push("customer: " + (err && err.message || err)); }
-    return json_({ ok: true, code: o.code, season: o.season, emailErrors: emailErrors });
+    try { pendingCustomer_(o, summary, depUrl); } catch (err) { emailErrors.push("customer: " + (err && err.message || err)); }
+    return json_({ ok: true, code: o.code, season: o.season, depositUrl: depUrl, groupSize: 1, emailErrors: emailErrors });
   }
 
   return json_({ ok: false, error: "unknown action" });
@@ -424,8 +508,9 @@ function adminPost_(body) {
     const sh = sheet_();
     const row = sh.getRange(at, 1, 1, HEADERS.length).getValues()[0];
     const order = orderFromRow_(row);
+    order.groupSize = groupSizeOf_(order);
     const steer = steerFor_(order);
-    const price = priceFor_(order, steer);
+    const price = priceFor_(order, steer, order.groupSize);
     /* the browser asks; the sheet decides what the bill actually is */
     if (!price) return json_({ ok: false, error: "that order's steer has no hanging weight yet" });
     if (!order.email) return json_({ ok: false, error: "that order has no email address" });
@@ -498,13 +583,18 @@ function relink_(from, to) {
 /* The final money for one order, once its steer has a weight. Mirrors
    finalPrice() in src/lib/estimate.ts — keep the two in step. Returns
    null while the animal is still unweighed. */
-function priceFor_(order, steer) {
+function priceFor_(order, steer, groupSize) {
   if (!steer || !(Number(steer.hangingWeight) > 0)) return null;
   const hangingLbs = Number(steer.hangingWeight);
-  const rate = Number(steer.rate) > 0 ? Number(steer.rate) : STANDARD_RATE;
+  /* the tier sets the list rate; a heavy-steer discount (entered on the
+     steer as a whole-share rate) comes off every tier by the same amount */
+  const tier = tierFor_(order.share, groupSize || 1);
+  const standardRate = SHARE_RATES[tier];
+  const steerDiscount = Number(steer.rate) > 0 ? Math.max(0, Math.round((SHARE_RATES.whole - Number(steer.rate)) * 100) / 100) : 0;
+  const rate = Math.round((standardRate - steerDiscount) * 100) / 100;
   const shareLbs = Math.round(hangingLbs * (SHARE_FRAC[order.share] || 0));
   const total = Math.round(shareLbs * rate);
-  const adjusted = rate < STANDARD_RATE;
+  const adjusted = steerDiscount > 0;
   /* the patty fee is the butcher's, but it reaches them through us —
      the customer writes one check, to the ranch */
   const pattyLbs = pattyPounds_(order.cutSheet);
@@ -512,7 +602,10 @@ function priceFor_(order, steer) {
   const billTotal = total + pattyCharge;
   return {
     rate: rate,
-    standardRate: STANDARD_RATE,
+    standardRate: standardRate,
+    tier: tier,
+    groupSize: groupSize || 1,
+    groupUnlocked: tier !== order.share,
     adjusted: adjusted,
     heavy: adjusted && hangingLbs > HANGING_TYP,
     hangingLbs: hangingLbs,
@@ -523,7 +616,7 @@ function priceFor_(order, steer) {
     total: billTotal,
     deposit: DEPOSIT,
     balance: billTotal - DEPOSIT,
-    saved: adjusted ? Math.round(shareLbs * (STANDARD_RATE - rate)) : 0,
+    saved: adjusted ? Math.round(shareLbs * steerDiscount) : 0,
   };
 }
 
@@ -586,7 +679,40 @@ function notifyRanch_(o, summary, cost) {
   MailApp.sendEmail({ to: to, subject: subject, body: bodyText });
 }
 
-function confirmCustomer_(o, summary, cost, depositLink) {
+/* Sent the moment a cut sheet is saved: here's your code, finish the
+   deposit, and a way back if they wander off Stripe. */
+function pendingCustomer_(o, summary, depositUrl) {
+  const first = (o.name || "").split(" ")[0];
+  const share = shareLabel_(o.share).toLowerCase();
+  const back = SITE_URL + "/#/order/confirmed/" + o.code;
+  const text = [
+    "Hi " + first + ",",
+    "",
+    "Your cut sheet for a " + share + " beef is saved under order code " + o.code + ".",
+    "Your share is held once the " + money_(DEPOSIT) + " deposit is in:",
+    depositUrl ? "   Pay the deposit by card: " + depositUrl : "   Reply to this email and we'll send a payment link.",
+    "",
+    "Already paid? Confirm here: " + back,
+    "",
+    "YOUR CUT SHEET",
+    summary,
+    "",
+    "— Thunderbolt Ranch · Ranch to Table",
+  ].join("\n");
+  const btn = (url, label, bg) => '<a href="' + url + '" style="display:inline-block;padding:13px 22px;background:' + bg + ';color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-family:Helvetica,Arial,sans-serif">' + label + '</a>';
+  const html = '<div style="font-family:Georgia,serif;color:#2b2521;max-width:620px;margin:0 auto;line-height:1.55">'
+    + '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#7a3b22">Thunderbolt Ranch · One step left</div>'
+    + '<h1 style="font-weight:400;font-size:26px;margin:6px 0 14px">Your cut sheet is saved, ' + esc_(first) + '.</h1>'
+    + '<p>Order code <b style="font-family:monospace">' + esc_(o.code) + '</b>. Your ' + esc_(share) + ' is held once the ' + money_(DEPOSIT) + ' deposit is in.</p>'
+    + (depositUrl ? '<p style="margin:16px 0">' + btn(depositUrl, 'Pay the ' + money_(DEPOSIT) + ' deposit', '#7a3b22') + '</p>' : '<p>Reply to this email and we\'ll send a payment link.</p>')
+    + '<p style="font-size:13px;color:#555">Already paid? <a href="' + back + '">Confirm your reservation</a>.</p>'
+    + '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#7a6333;margin:22px 0 8px">Your cut sheet</div>'
+    + '<pre style="font-family:Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6;background:#f7f3ea;border:1px solid #e6e0d4;border-radius:4px;padding:14px;white-space:pre-wrap;margin:0">' + esc_(summary) + '</pre>'
+    + '<p style="color:#888;font-size:13px;margin-top:22px">— Thunderbolt Ranch · Ranch to Table</p></div>';
+  MailApp.sendEmail({ to: o.email, subject: "Finish your Thunderbolt Ranch reservation — " + o.code, body: text, htmlBody: html, name: "Thunderbolt Ranch", replyTo: RANCH_INBOX });
+}
+
+function confirmCustomer_(o, summary, cost, depositLink, paid) {
   const first = (o.name || "").split(" ")[0];
   const share = shareLabel_(o.share).toLowerCase();
   const subject = "Your Thunderbolt Ranch beef is reserved — " + o.code;
@@ -609,9 +735,11 @@ function confirmCustomer_(o, summary, cost, depositLink) {
     "Thanks for reserving a " + share + " beef from Thunderbolt Ranch. Your order code is " + o.code + ".",
     harvestLine,
     "",
-    depositLink
-      ? "PAY YOUR " + money_(cost.deposit) + " DEPOSIT: " + depositLink
-      : "Josh will reach out shortly to collect your " + money_(cost.deposit) + " deposit.",
+    paid
+      ? "Deposit received — " + money_(DEPOSIT) + ". Your " + share + " is reserved."
+      : depositLink
+        ? "PAY YOUR " + money_(DEPOSIT) + " DEPOSIT: " + depositLink
+        : "We'll reach out shortly to collect your " + money_(DEPOSIT) + " deposit.",
     "Your deposit holds your share and applies to your total. Estimated total " + money_(cost.total) + " — the exact balance is figured on your animal's actual hanging weight, and you'll be invoiced for it once it's weighed. Nothing is due at pickup.",
     "",
     "WHAT HAPPENS NEXT",
@@ -619,6 +747,10 @@ function confirmCustomer_(o, summary, cost, depositLink) {
     "",
     "YOUR CUT SHEET",
     summary,
+    "",
+    "SPLIT A STEER WITH FRIENDS — everyone pays less",
+    "Your code: " + o.code + ". One friend who orders with it gets you both the half-steer rate ($" + SHARE_RATES.half.toFixed(2) + "/lb); three gets everyone the whole-steer rate ($" + SHARE_RATES.whole.toFixed(2) + "/lb).",
+    "Send them this link and your code is filled in: " + SITE_URL + "/#/order?ref=" + o.code,
     "",
     "Track your order any time: " + trackUrl,
     "Questions? Reply to this email, or write thunderboltbeef@gmail.com.",
@@ -633,9 +765,11 @@ function confirmCustomer_(o, summary, cost, depositLink) {
     '<h1 style="font-weight:400;font-size:26px;margin:6px 0 14px">Your ' + esc_(share) + ' beef is booked, ' + esc_(first) + '.</h1>',
     '<p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#555;margin:0 0 18px">Order code <b style="font-family:monospace;font-size:15px;color:#2b2521">' + esc_(o.code) + '</b> · ' + esc_(harvestLine) + '</p>',
     '<div style="margin:0 0 22px;padding:18px;background:#2b2521;color:#f3eee6;border-radius:4px">',
-    depositLink
-      ? '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c8a85a">One step to hold your share</div><div style="margin:10px 0 8px">' + btn(depositLink, 'Pay your ' + money_(cost.deposit) + ' deposit', '#b08d45') + '</div>'
-      : '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c8a85a">Deposit</div><p style="margin:8px 0">Josh will reach out shortly to collect your ' + money_(cost.deposit) + ' deposit.</p>',
+    paid
+      ? '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c8a85a">Deposit received</div><p style="margin:8px 0;font-size:18px">' + money_(DEPOSIT) + ' — your ' + esc_(share) + ' is reserved. &#10003;</p>'
+      : depositLink
+        ? '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c8a85a">One step to hold your share</div><div style="margin:10px 0 8px">' + btn(depositLink, 'Pay your ' + money_(DEPOSIT) + ' deposit', '#b08d45') + '</div>'
+        : '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c8a85a">Deposit</div><p style="margin:8px 0">We\'ll reach out shortly to collect your ' + money_(DEPOSIT) + ' deposit.</p>',
     '<p style="font-size:13px;color:#cfc6b8;margin:6px 0 0">Your deposit applies to your total. Estimated total ' + money_(cost.total) + ' — the exact balance is figured on your animal\'s actual hanging weight. You\'ll be invoiced for it once it\'s weighed, with a link to pay by bank (no fee) or card. <b style="color:#f3eee6">Nothing is due at pickup.</b></p>',
     '</div>',
     '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#7a6333;margin-bottom:8px">What happens next</div>',
@@ -646,6 +780,10 @@ function confirmCustomer_(o, summary, cost, depositLink) {
     '</table>',
     '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#7a6333;margin:22px 0 8px">Your cut sheet</div>',
     '<pre style="font-family:Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6;background:#f7f3ea;border:1px solid #e6e0d4;border-radius:4px;padding:14px;white-space:pre-wrap;margin:0">' + esc_(summary) + '</pre>',
+    '<div style="margin:22px 0;padding:16px 18px;background:#f3ecd8;border-left:4px solid #b08d45;font-family:Helvetica,Arial,sans-serif">'
+    + '<div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#7a6333">Split a steer with friends — everyone pays less</div>'
+    + '<p style="margin:6px 0 0;font-size:14px">Your code is <b style="font-family:monospace;font-size:15px">' + esc_(o.code) + '</b>. One friend who orders with it gets you both the half-steer rate ($' + SHARE_RATES.half.toFixed(2) + '/lb); three gets everyone the whole-steer rate ($' + SHARE_RATES.whole.toFixed(2) + '/lb).</p>'
+    + '<p style="margin:8px 0 0;font-size:13px"><a href="' + SITE_URL + '/#/order?ref=' + esc_(o.code) + '" style="color:#7a3b22">Send friends this link</a> and your code is filled in for them.</p></div>',
     '<p style="margin:22px 0 0;font-family:Helvetica,Arial,sans-serif;font-size:14px">' + btn(trackUrl, 'Track your order', '#7a3b22') + '</p>',
     '<p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#555">Questions? Just reply to this email.</p>',
     '<p style="color:#888;font-size:13px">— Thunderbolt Ranch · Ranch to Table</p>',
@@ -732,7 +870,7 @@ function stripe_(method, path, params) {
    Ranch Office is told. */
 function cardAmount_(balance) { return Math.round(balance * (1 + CARD_FEE_PCT)); }
 
-function makeLink_(order, amountDollars, label, method, token) {
+function makeLink_(order, amountDollars, label, method, redirectUrl) {
   const priceObj = stripe_("post", "/prices", {
     unit_amount: String(Math.round(amountDollars * 100)),
     currency: "usd",
@@ -745,7 +883,7 @@ function makeLink_(order, amountDollars, label, method, token) {
     "metadata[order]": order.code,
     "metadata[method]": method,
     "after_completion[type]": "redirect",
-    "after_completion[redirect][url]": SITE_URL + "/#/confirm/" + order.code + "?t=" + token + "&paid=1",
+    "after_completion[redirect][url]": redirectUrl,
   });
   return {
     id: link.id,
@@ -754,14 +892,15 @@ function makeLink_(order, amountDollars, label, method, token) {
 }
 
 function createPayLinks_(order, price, token) {
+  const back = SITE_URL + "/#/confirm/" + order.code + "?t=" + token + "&paid=1";
   const out = { ach: null, card: null, achAvailable: true };
   try {
-    out.ach = makeLink_(order, price.balance, "balance by bank", "us_bank_account", token);
+    out.ach = makeLink_(order, price.balance, "balance by bank", "us_bank_account", back);
   } catch (err) {
     if (!/us_bank_account|payment_method/i.test(String(err && err.message || err))) throw err;
     out.achAvailable = false;
   }
-  out.card = makeLink_(order, cardAmount_(price.balance), "balance by card incl. " + Math.round(CARD_FEE_PCT * 100) + "% card fee", "card", token);
+  out.card = makeLink_(order, cardAmount_(price.balance), "balance by card incl. " + Math.round(CARD_FEE_PCT * 100) + "% card fee", "card", back);
   return out;
 }
 
@@ -788,7 +927,8 @@ function payLinkState_(ids) {
 /* ---- the emails ---- */
 
 function moneyLines_(o, price) {
-  const lines = ["Beef: " + price.shareLbs + " lb × $" + price.rate.toFixed(2) + "/lb = " + money_(price.beefTotal)];
+  const lines = ["Beef: " + price.shareLbs + " lb × $" + price.rate.toFixed(2) + "/lb = " + money_(price.beefTotal)
+    + (price.groupUnlocked ? "   (group of " + price.groupSize + " — " + price.tier + "-steer rate)" : "")];
   if (price.pattyCharge > 0) {
     lines.push("Patties: " + price.pattyLbs + " lb × $" + PATTY_RATE.toFixed(2) + "/lb = " + money_(price.pattyCharge) + "  (the butcher's charge for pressing them, which we pay and add here)");
     lines.push("Total: " + money_(price.total));

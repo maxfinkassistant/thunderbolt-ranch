@@ -91,6 +91,7 @@ export function sampleCutSheet(): CutSheetAnswers {
 /* ---------------- orders ---------------- */
 
 export type OrderStatus =
+  | "pending-deposit" // cut sheet saved, deposit not yet seen — doesn't count toward the season
   | "reserved"      // deposit in, share held
   | "locked"        // cut sheet sent to the butcher
   | "processing"    // harvested, hanging at Colorado Custom
@@ -110,6 +111,12 @@ export interface Order {
   season?: SeasonId;       // which harvest it's reserved from; absent = current
   steer?: string;          // Steer.id, once the ranch links it
   sample?: boolean;
+  /* group ordering: the code a friend typed, and the group it joined */
+  referral?: string;
+  group?: string;          // root order code of the group (own code when they started one)
+  groupSize?: number;      // confirmed orders in the group, from the order system
+  depositUrl?: string;     // only while pending, only to the customer
+  depositPaidAt?: string;
   /* final-invoice workflow — stamped by the order system, read-only here */
   invoicedAt?: string;
   signedBy?: string;
@@ -145,7 +152,7 @@ export const DEFAULT_SETTINGS: SeasonSettings = { capacity: SEASON_STEERS, offli
     real order's share, plus whatever was sold off the site. */
 export function reservedSteers(orders: Order[], settings: SeasonSettings): number {
   const online = orders
-    .filter((o) => !o.sample && (o.season ?? CURRENT_SEASON) === CURRENT_SEASON)
+    .filter((o) => !o.sample && o.status !== "pending-deposit" && (o.season ?? CURRENT_SEASON) === CURRENT_SEASON)
     .reduce((t, o) => t + SHARES[o.share].frac, 0);
   return online + settings.offline;
 }
@@ -205,12 +212,12 @@ export function getOrder(code: string): Order | undefined {
   return listOrders().find((o) => o.code.toUpperCase() === code.toUpperCase());
 }
 
-export function createOrder(input: Omit<Order, "code" | "createdAt" | "status">): Order {
+export function createOrder(input: Omit<Order, "code" | "createdAt" | "status">, status: OrderStatus = "reserved"): Order {
   const order: Order = {
     ...input,
     code: "TR-" + randomCode(6),
     createdAt: new Date().toISOString(),
-    status: "reserved",
+    status,
   };
   const rows = listOrders();
   rows.push(order);

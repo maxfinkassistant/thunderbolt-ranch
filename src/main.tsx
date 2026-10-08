@@ -9,6 +9,7 @@ import Track from "./pages/Track";
 import Customers from "./pages/Customers";
 import CustomerTicket from "./pages/CustomerTicket";
 import Confirm from "./pages/Confirm";
+import Booked from "./pages/Booked";
 import "./styles/global.css";
 
 function Root() {
@@ -27,6 +28,7 @@ const routes = [
       { path: "/", element: <Landing /> },
       { path: "/how-it-works", element: <HowItWorks /> },
       { path: "/order", element: <Order /> },
+      { path: "/order/confirmed/:code", element: <Booked /> },
       { path: "/track", element: <Track /> },
       { path: "/track/:code", element: <Track /> },
       { path: "/confirm/:code", element: <Confirm /> },

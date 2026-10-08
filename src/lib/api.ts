@@ -13,7 +13,8 @@ export interface OrderPayload {
   order: Order;
   summary: { name: string; detail: string }[];
   cost: { total: number; deposit: number; balance: number };
-  depositLink: string;
+  depositLink: string;     // dashboard fallback link, used only if the script can't make one
+  referral?: string;
 }
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
@@ -27,8 +28,14 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
 
 /** `season` comes back once the backend knows about seasons — it
     decides fall vs. winter from what's actually left. */
-export async function submitOrder(payload: OrderPayload): Promise<{ ok: true; code: string; season?: SeasonId }> {
+export async function submitOrder(payload: OrderPayload): Promise<{ ok: true; code: string; season?: SeasonId; depositUrl?: string; groupSize?: number }> {
   return call(BACKEND_URL, { method: "POST", body: JSON.stringify({ action: "order", ...payload }) });
+}
+
+/** Has the deposit landed? The script asks Stripe, and if so flips the
+    order to reserved and sends the confirmation. Safe to call repeatedly. */
+export async function checkDeposit(code: string): Promise<{ ok: true; paid: boolean; order: Order | null; depositUrl?: string }> {
+  return call(`${BACKEND_URL}?action=deposit&code=${encodeURIComponent(code)}`);
 }
 
 /** What the customer's own tracking page is allowed to know about the

@@ -9,10 +9,32 @@
 
 export type ShareId = "quarter" | "half" | "whole";
 
-/* One price for every share size. */
-export const HANGING_RATE = 6.0;        // $/lb hanging weight
-export const TAKEHOME_RATE_EST = 8.57;  // $/lb take-home estimate
-export const DEPOSIT = 250;             // flat, all share sizes
+/* Rates by share: a smaller share costs a little more per pound. A
+   group that fills more of a steer together unlocks the bigger share's
+   rate for everyone in it — see GROUP_UNLOCK. The ranch can still set
+   a lower whole-share rate on a heavy steer; halves and quarters sit
+   their usual step above it. */
+export const SHARE_RATES: Record<ShareId, number> = { whole: 6.0, half: 6.15, quarter: 6.25 };
+export const HANGING_RATE = SHARE_RATES.whole;    // the headline "from" rate
+export const TAKEHOME_RATE_EST = 8.57;            // whole-share take-home estimate, the "from" figure
+export const DEPOSIT = 500;                       // flat, all share sizes, card
+
+/* Friends needed — beyond you — to unlock a bigger share's rate. */
+export const GROUP_UNLOCK = { half: 1, whole: 3 } as const;
+const TIER_ORDER: ShareId[] = ["quarter", "half", "whole"];   // worst rate → best
+
+export function groupTier(size: number): ShareId {
+  return size >= GROUP_UNLOCK.whole + 1 ? "whole" : size >= GROUP_UNLOCK.half + 1 ? "half" : "quarter";
+}
+/** The rate tier an order actually pays: its own share, or better if the group earned it. */
+export function tierFor(share: ShareId, groupSize = 1): ShareId {
+  const g = groupTier(groupSize);
+  return TIER_ORDER.indexOf(g) > TIER_ORDER.indexOf(share) ? g : share;
+}
+export const rateFor = (share: ShareId, groupSize = 1) => SHARE_RATES[tierFor(share, groupSize)];
+/** ≈ $/lb in the freezer for a share, at typical weights. */
+export const takehomeRate = (share: ShareId, groupSize = 1) =>
+  Math.round(((SHARES[share].hanging * rateFor(share, groupSize)) / SHARES[share].takehome) * 100) / 100;
 
 /* Every estimate on the site is built from a typical 1,000 lb hanging
    carcass. Live weight is back-derived (≈ 60% dresses out); take-home
@@ -32,7 +54,7 @@ export interface Share {
   frac: number;
   hanging: number;   // lbs, typical
   takehome: number;  // lbs, typical
-  total: number;     // $ = hanging × $6
+  total: number;     // $ = hanging × this share's rate, typical animal
   freezer: string;
   feeds: string;
 }
@@ -40,17 +62,17 @@ export interface Share {
 export const SHARES: Record<ShareId, Share> = {
   quarter: {
     id: "quarter", label: "Quarter", frac: 0.25,
-    hanging: 250, takehome: 175, total: 1500,
+    hanging: 250, takehome: 175, total: Math.round(250 * SHARE_RATES.quarter),
     freezer: "≈ 5 cu ft", feeds: "2–3 people for about 6 months",
   },
   half: {
     id: "half", label: "Half", frac: 0.5,
-    hanging: 500, takehome: 350, total: 3000,
+    hanging: 500, takehome: 350, total: Math.round(500 * SHARE_RATES.half),
     freezer: "≈ 10 cu ft", feeds: "a family of 4 for about a year",
   },
   whole: {
     id: "whole", label: "Whole", frac: 1,
-    hanging: 1000, takehome: 700, total: 6000,
+    hanging: 1000, takehome: 700, total: Math.round(1000 * SHARE_RATES.whole),
     freezer: "≈ 20 cu ft", feeds: "a large family, or two households",
   },
 };
@@ -63,7 +85,7 @@ export const balanceAtPickup = (s: Share) => s.total - DEPOSIT;
    orders roll to the next season. The season ids are mirrored in
    apps-script/Code.gs — change both together.                    */
 
-export type SeasonId = "fall-2026" | "winter-2027";
+export type SeasonId = "fall-2026" | "winter-2027" | "spring-2027";
 
 export interface Season {
   id: SeasonId;
@@ -77,14 +99,15 @@ export interface Season {
 export const SEASONS: Record<SeasonId, Season> = {
   "fall-2026": { id: "fall-2026", label: "Fall 2026", name: "fall", pickup: "Estimated mid-October", pickupText: "estimated mid-October", pickupShort: "mid-October" },
   "winter-2027": { id: "winter-2027", label: "Winter 2027", name: "winter", pickup: "Estimated January", pickupText: "estimated January", pickupShort: "January" },
+  "spring-2027": { id: "spring-2027", label: "Spring 2027", name: "spring", pickup: "Estimated April", pickupText: "estimated April", pickupShort: "April" },
 };
 
-export const CURRENT_SEASON: SeasonId = "fall-2026";
-export const NEXT_SEASON: SeasonId = "winter-2027";
+export const CURRENT_SEASON: SeasonId = "winter-2027";
+export const NEXT_SEASON: SeasonId = "spring-2027";
 
 /** Steers set aside for the current season. The Ranch Office can
     change this; it's the fallback until the order system answers. */
-export const SEASON_STEERS = 7;
+export const SEASON_STEERS = 20;
 
 /** Orders placed before seasons existed belong to the current one. */
 export const seasonOf = (o: { season?: string }): Season =>
@@ -103,6 +126,7 @@ export const PROCESSOR = {
 /* No phone on the site or in emails — questions go to the inbox. */
 export const RANCH_CONTACT = { name: "Josh", email: "thunderboltbeef@gmail.com", site: "thunderboltbeef.com" };
 export const PAYABLE_TO = "Thunderbolt Ranch LLC";
+export const SITE_URL = "https://thunderboltbeef.com";
 
 /* ---------------- brand copy (substantiated only) ----------------
    Approved claims: Colorado cattle / ranch / butcher; Angus;
@@ -490,7 +514,7 @@ export function savingsFor(share: ShareId): { rows: SavingsRow[]; totals: { lbs:
   const frac = SHARES[share].frac;
   const rows = GROCERY_CUTS.map((cut) => {
     const lbs = Math.round(cut.lbsWhole * frac);
-    const yours = lbs * TAKEHOME_RATE_EST;
+    const yours = lbs * takehomeRate(share);
     const store = lbs * cut.retail;
     return { cut, lbs, yours, store, saved: store - yours };
   });

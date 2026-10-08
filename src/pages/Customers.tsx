@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  SHARES, SEASONS, CURRENT_SEASON, DEPOSIT, HANGING_RATE, seasonOf, money, money2, type Season,
+  SHARES, SEASONS, CURRENT_SEASON, DEPOSIT, HANGING_RATE, SHARE_RATES, seasonOf, tierFor, money, money2, type Season,
   type SeasonId,
 } from "../data/config";
 import {
@@ -18,7 +18,7 @@ import { downloadCutSheet, buildFilledCutSheet, bytesToBase64 } from "../lib/cut
 import { finalPrice } from "../lib/estimate";
 import {
   backendConfigured, checkAdminKey, fetchOffice, pushStatus,
-  pushSteer, removeSteer, pushAssignment, pushSettings, sendInvoice, checkStripe, type Office,
+  pushSteer, removeSteer, pushAssignment, pushSettings, sendInvoice, checkStripe, checkDeposit, type Office,
 } from "../lib/api";
 import { refreshAvailability, steerCount } from "../lib/availability";
 import SteerTracker from "../components/SteerTracker";
@@ -28,7 +28,7 @@ type Tab = "roster" | "steers" | "customers";
 /** What the order actually costs once its steer has been weighed —
     at that animal's rate, which may sit under the standard one. */
 function actualTotal(o: Order, steer?: Steer): number | null {
-  return finalPrice(o.share, steer, o.cutSheet)?.total ?? null;
+  return finalPrice(o.share, steer, o.cutSheet, o.groupSize ?? 1)?.total ?? null;
 }
 
 const fmtDate = (iso?: string) =>
@@ -71,7 +71,7 @@ function exportInvoices(orders: Order[], steers: Steer[], season: Season) {
     ["code", "name", "email", "share", "steer", "hanging_lbs", "share_lbs", "rate_per_lb", "beef_total", "patty_lbs", "patty_charge", "total", "deposit", "balance", "priced_on", "status"],
     orders.map((o) => {
       const st = steers.find((x) => x.id === o.steer);
-      const p = finalPrice(o.share, st, o.cutSheet);
+      const p = finalPrice(o.share, st, o.cutSheet, o.groupSize ?? 1);
       return p
         ? [o.code, o.name, o.email, SHARES[o.share].label, o.steer ?? "", p.hangingLbs, p.shareLbs, p.rate.toFixed(2), p.beefTotal, p.pattyLbs, p.pattyCharge, p.total, p.deposit, p.balance, "actual weight", o.status]
         : [o.code, o.name, o.email, SHARES[o.share].label, o.steer ?? "", "", SHARES[o.share].hanging, HANGING_RATE.toFixed(2), SHARES[o.share].total, "", "", SHARES[o.share].total, DEPOSIT, SHARES[o.share].total - DEPOSIT, "estimate", o.status];
@@ -170,7 +170,7 @@ function SteerRow({
               </span>
             : rate !== undefined && rate > HANGING_RATE
               ? <span className="admin-sub" style={{ color: "var(--rust)" }}>Above standard</span>
-              : <span className="admin-sub">Blank = standard</span>}
+              : <span className="admin-sub">Whole-share $/lb · half +{(SHARE_RATES.half - SHARE_RATES.whole).toFixed(2)}, quarter +{(SHARE_RATES.quarter - SHARE_RATES.whole).toFixed(2)}</span>}
       </td>
       <td>
         <input className="admin-input" type="date" value={d.killDate} aria-label={`Kill date for ${label}`}
@@ -296,6 +296,8 @@ export default function Customers() {
   const live = backendConfigured();
   const local = useMemo(() => listOrders(), [tick]);
   const orders = remote?.orders ?? local;
+  /* money and tracker math only count orders whose deposit is in */
+  const paidOrders = orders.filter((o) => o.status !== "pending-deposit");
   const exportOrders = useMemo(
     () => orders.filter((o) => !o.sample && seasonOf(o).id === exportSeason),
     [orders, exportSeason],
@@ -353,7 +355,7 @@ export default function Customers() {
      decides when a steer's numbers are settled enough to bill on. */
   const emailInvoice = async (o: Order) => {
     const steer = steers.find((x) => x.id === o.steer);
-    const price = finalPrice(o.share, steer, o.cutSheet);
+    const price = finalPrice(o.share, steer, o.cutSheet, o.groupSize ?? 1);
     if (!price) return;
     const ask = price.adjusted
       ? `Email ${o.name} their final invoice? ${money(price.balance)} due at ${money2(price.rate)}/lb `
@@ -494,11 +496,11 @@ export default function Customers() {
             <tbody>
               {orders.map((o) => {
                 const steer = steers.find((x) => x.id === o.steer);
-                const price = finalPrice(o.share, steer, o.cutSheet);
+                const price = finalPrice(o.share, steer, o.cutSheet, o.groupSize ?? 1);
                 const actual = price?.total ?? null;
                 return (
-                <tr key={o.code}>
-                  <td className="mono">{o.code}{o.sample && <span className="admin-chip">sample</span>}</td>
+                <tr key={o.code} className={o.status === "pending-deposit" ? "row-pending" : ""}>
+                  <td className="mono">{o.code}{o.sample && <span className="admin-chip">sample</span>}{o.status === "pending-deposit" && <span className="admin-chip hot">no deposit</span>}</td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{o.name}</div>
                     <div className="small mute">{o.email}{o.phone && ` · ${o.phone}`}</div>
@@ -538,6 +540,9 @@ export default function Customers() {
                     {price?.adjusted && (
                       <span className="admin-chip done">rate cut · saves {money(price.saved)}</span>
                     )}
+                    {(o.groupSize ?? 1) > 1 && (
+                      <span className="admin-chip">group of {o.groupSize} · {price ? price.tier : tierFor(o.share, o.groupSize)}-steer rate</span>
+                    )}
                   </td>
                   <td>
                     <select
@@ -546,6 +551,7 @@ export default function Customers() {
                       onChange={(e) => changeStatus(o, e.target.value as OrderStatus)}
                       aria-label={`Status for ${o.code}`}
                     >
+                      <option value="pending-deposit">Awaiting deposit</option>
                       {STATUS_STEPS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                     </select>
                   </td>
@@ -559,6 +565,12 @@ export default function Customers() {
                       {pdfBusy === o.code ? "…" : "CCMC PDF"}
                     </button>
                     <Link className="small" to={`/customers/ticket/${o.code}`}>Ticket</Link>
+                    {o.status === "pending-deposit" && live && (
+                      <button className="small" style={{ textDecoration: "underline" }}
+                        onClick={async () => { setLoadError(null); try { const r = await checkDeposit(o.code); setLoadError(r.paid ? `${o.code}: deposit found — now reserved.` : `${o.code}: Stripe shows no deposit yet.`); setTick((t) => t + 1); } catch (e) { setLoadError((e as Error).message); } }}>
+                        Check deposit
+                      </button>
+                    )}
                     <button
                       className="small" style={{ textDecoration: "underline" }}
                       disabled={!price || !live || invoiceBusy === o.code}

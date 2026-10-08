@@ -68,7 +68,7 @@ export default function HowItWorks() {
           </h1>
           <p className="lede" style={{ marginTop: "var(--space-lg)" }}>
             One Angus animal, raised in Colorado and cut exactly the way you ask —
-            at {money2(HANGING_RATE)}/lb hanging weight, about {money2(TAKEHOME_RATE_EST)}/lb
+            from {money2(HANGING_RATE)}/lb hanging weight, about {money2(TAKEHOME_RATE_EST)}/lb
             in your freezer. Here's the whole process, start to finish.
           </p>
         </div>
@@ -114,7 +114,7 @@ export default function HowItWorks() {
               <p>
                 Roughly {money(savingsFor("quarter").totals.saved)} on a quarter
                 and {money(savingsFor("whole").totals.saved)} on a whole, measured against what the
-                same cuts cost on the shelf. One price — {money2(TAKEHOME_RATE_EST)}/lb take-home —
+                same cuts cost on the shelf. One price per share — from {money2(TAKEHOME_RATE_EST)}/lb take-home —
                 covers ribeyes and burger alike, with cutting and wrapping included rather than
                 billed on at the end.
               </p>

@@ -8,6 +8,7 @@ import { getOrder, listOrders, listSteers, STATUS_STEPS, statusIndex, type Order
 import { boxSummary, finalPrice, rateNote } from "../lib/estimate";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
 import { backendConfigured, fetchTracking, type PublicPricing } from "../lib/api";
+import GroupPanel from "../components/GroupPanel";
 
 export default function Track() {
   const { code } = useParams();
@@ -100,7 +101,7 @@ export default function Track() {
   /* the live backend hands back this order's own animal; in local demo
      mode the steers are right here in the browser */
   const weighed = pricing ?? (backendConfigured() ? undefined : listSteers().find((s) => s.id === order.steer));
-  const price = finalPrice(viewShare, weighed, order.cutSheet);
+  const price = finalPrice(viewShare, weighed, order.cutSheet, order.groupSize ?? 1);
   const note = rateNote(price);
   const whenFor = (stepId: string): string => {
     switch (stepId) {
@@ -167,6 +168,15 @@ export default function Track() {
             })}
           </div>
 
+          {order.status === "pending-deposit" && (
+            <div className="group-note" style={{ marginTop: "var(--space-sm)", marginBottom: 0, borderColor: "var(--rust)", background: "var(--rust-tint)" }}>
+              <span className="tag" style={{ color: "var(--rust)" }}>Deposit</span>
+              <span>
+                Your cut sheet is saved, but your share isn't held until the {money(DEPOSIT)} deposit is in.{" "}
+                <Link to={`/order/confirmed/${order.code}`}><b>Pay the deposit →</b></Link>
+              </span>
+            </div>
+          )}
           {order.status === "reserved" && (
             <div className="group-note" style={{ marginTop: "var(--space-sm)", marginBottom: 0 }}>
               <span className="tag">Held</span>
@@ -197,6 +207,12 @@ export default function Track() {
           </div>
         </div>
       </div>
+
+      {!order.sample && order.status !== "pending-deposit" && (
+        <div style={{ marginTop: "var(--space-xl)" }}>
+          <GroupPanel code={order.code} share={order.share} size={order.groupSize ?? 1} />
+        </div>
+      )}
 
       {price && (
         <div className="owed">

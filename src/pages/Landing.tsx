@@ -4,7 +4,7 @@ import SteerMap from "../components/SteerMap";
 import CutDialog from "../components/CutDialog";
 import SteerTracker from "../components/SteerTracker";
 import {
-  SHARES, DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST,
+  SHARES, DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST, SHARE_RATES, GROUP_UNLOCK, takehomeRate,
   USDA_CHOICE, GROCERY_SOURCE, SEASONS, CURRENT_SEASON, NEXT_SEASON, STORAGE_NOTE,
   PROCESSOR, PAYABLE_TO, RANCH_CONTACT,
   LIVE_TYP, STORY, QUALITY, IMAGES, PRIMALS, balanceAtPickup,
@@ -38,8 +38,8 @@ export default function Landing() {
               <Link to="/how-it-works" className="btn btn-ghost btn-big">How it works</Link>
             </div>
             <div className="hero-fine">
-              <span>{money2(HANGING_RATE)}/LB HANGING WEIGHT</span>
-              <span>≈ {money2(TAKEHOME_RATE_EST)}/LB TAKE-HOME</span>
+              <span>FROM {money2(HANGING_RATE)}/LB HANGING WEIGHT</span>
+              <span>FROM ≈ {money2(TAKEHOME_RATE_EST)}/LB TAKE-HOME</span>
               <span>{money(DEPOSIT)} DEPOSIT, ANY SIZE</span>
             </div>
           </div>
@@ -79,14 +79,14 @@ export default function Landing() {
                   </div>
                 </div>
                 <div className="takehome-rate">
-                  ≈ {money2(TAKEHOME_RATE_EST)}/lb all in · fills {s.freezer} of freezer
+                  {money2(SHARE_RATES[s.id])}/lb hanging · ≈ {money2(takehomeRate(s.id))}/lb all in · {s.freezer} of freezer
                 </div>
               </div>
             ))}
           </div>
           <p className="small mute" style={{ marginTop: "var(--space-md)", maxWidth: "75ch" }}>
             <sup>*</sup>Close estimates from a typical {LIVE_TYP.toLocaleString()} lb animal — yours
-            may run somewhat above or below. You pay {money2(HANGING_RATE)}/lb on your animal's
+            may run somewhat above or below. You pay your share's rate per pound on your animal's
             actual hanging weight, so the final number is real. {money(DEPOSIT)} of the total is
             your deposit; the rest is invoiced once your beef is weighed.
           </p>
@@ -99,10 +99,11 @@ export default function Landing() {
           <div>
             <span className="tag">Your price, everything included</span>
             <div className="d" style={{ fontSize: "clamp(2rem,3.5vw,2.8rem)", lineHeight: 1 }}>
-              ≈ {money2(TAKEHOME_RATE_EST)}/lb
+              from ≈ {money2(TAKEHOME_RATE_EST)}/lb
             </div>
             <p className="dim">
-              Take-home estimate at {money2(HANGING_RATE)}/lb hanging weight. Cutting, wrapping
+              Take-home estimate on a whole, at {money2(HANGING_RATE)}/lb hanging weight — halves and
+              quarters run a little more per pound, and groups unlock the lower rates. Cutting, wrapping
               and freezing are all included — no processing fees on top.
             </p>
           </div>
@@ -149,7 +150,7 @@ export default function Landing() {
           <div className="section-head">
             <h2 className="d">Versus the grocery store</h2>
             <p>
-              Your beef costs the same {money2(TAKEHOME_RATE_EST)}/lb whether it comes out as
+              Your beef costs the same {money2(takehomeRate(savingsShare))}/lb whether it comes out as
               ribeyes or burger. The store charges you a different price for every cut — here's
               what that difference is worth.
             </p>
@@ -174,7 +175,7 @@ export default function Landing() {
               <span className="tag">From Thunderbolt Ranch</span>
               <div className="d savings-big">{money(sv.totals.yours)}</div>
               <p className="small mute">
-                the same {sv.totals.lbs} lb at {money2(TAKEHOME_RATE_EST)}/lb, every cut.
+                the same {sv.totals.lbs} lb at {money2(takehomeRate(savingsShare))}/lb, every cut.
               </p>
             </div>
             <div>
@@ -205,7 +206,7 @@ export default function Landing() {
                       <span className="cut-store">vs. {r.cut.store}</span>
                     </td>
                     <td className="n mono">{r.lbs}</td>
-                    <td className="n mono">{money2(TAKEHOME_RATE_EST)}</td>
+                    <td className="n mono">{money2(takehomeRate(savingsShare))}</td>
                     <td className="n mono">{money2(r.cut.retail)}</td>
                     <td className={"n mono" + (r.saved >= 10 ? " save" : " even")}>{moneySigned(r.saved)}</td>
                   </tr>
@@ -260,7 +261,9 @@ export default function Landing() {
           <div className="section-head">
             <h2 className="d">Pricing &amp; deposits</h2>
             <p>
-              {money2(HANGING_RATE)}/lb hanging weight, every share size. {money(DEPOSIT)} deposit
+              {money2(SHARE_RATES.quarter)}/lb hanging for a quarter, {money2(SHARE_RATES.half)} for a half,
+              {" "}{money2(SHARE_RATES.whole)} for a whole — and ordering with friends unlocks the lower
+              rates for everyone. {money(DEPOSIT)} deposit
               holds your beef and applies to your total; the balance is invoiced once your beef is weighed, paid by bank or card from the link. Every
               figure marked <sup>*</sup> is an estimate for a typical animal.
             </p>
@@ -272,6 +275,7 @@ export default function Landing() {
                 <div className="d">{s.label}</div>
                 <div className="d" style={{ fontSize: "2.2rem", marginTop: 6, color: "var(--rust)" }}>{money(s.total)}<sup>*</sup></div>
                 <div className="share-specs">
+                  <span>{money2(SHARE_RATES[s.id])}/LB HANGING</span>
                   <span>≈ {s.takehome} LBS TAKE-HOME<sup>*</sup></span>
                   <span className="hot">FREEZER {s.freezer}</span>
                 </div>
@@ -288,9 +292,25 @@ export default function Landing() {
           </div>
           <p className="small mute" style={{ marginTop: "var(--space-md)", maxWidth: "70ch" }}>
             <sup>*</sup>Prices and weights are estimates for a typical {LIVE_TYP.toLocaleString()} lb
-            animal. You pay {money2(HANGING_RATE)}/lb on your animal's actual hanging weight, so your
+            animal. You pay your share's rate on your animal's actual hanging weight, so your
             final total moves with the animal.
           </p>
+          <div className="split-band">
+            <div>
+              <span className="tag">Split a steer with friends</span>
+              <h3 className="d" style={{ marginTop: "var(--space-xs)" }}>Bring {GROUP_UNLOCK.half} friend and you both pay the half rate. Bring {GROUP_UNLOCK.whole} and it's the whole rate.</h3>
+              <p className="small">
+                Every order comes with a code. Friends enter it at checkout and join your group — four quarters
+                ordered together pay {money2(SHARE_RATES.whole)}/lb, same as one family buying the whole animal.
+                Everyone in the group gets the rate, not just whoever started it.
+              </p>
+            </div>
+            <div className="split-steps">
+              <div><b>Just you</b><span>{money2(SHARE_RATES.quarter)}/lb on a quarter</span></div>
+              <div><b>+{GROUP_UNLOCK.half} friend</b><span>{money2(SHARE_RATES.half)}/lb for both</span></div>
+              <div><b>+{GROUP_UNLOCK.whole} friends</b><span>{money2(SHARE_RATES.whole)}/lb for all four</span></div>
+            </div>
+          </div>
           <div style={{ marginTop: "var(--space-lg)", display: "flex", gap: "var(--space-md)", alignItems: "center", flexWrap: "wrap" }}>
             <Link to="/order" className="btn btn-dark">Start an order</Link>
             <span className="small mute">{season.label} harvest · pickup {season.pickupText}.</span>

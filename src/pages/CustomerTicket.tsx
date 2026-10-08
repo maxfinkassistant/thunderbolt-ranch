@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  SHARES, DEPOSIT, HANGING_RATE, PAYABLE_TO, RANCH_CONTACT, PATTY_RATE, PATTY_BILLING_NOTE,
+  SHARES, DEPOSIT, PAYABLE_TO, RANCH_CONTACT, PATTY_RATE, PATTY_BILLING_NOTE, rateFor,
   seasonOf, money, money2,
 } from "../data/config";
 import { getOrder, listSteers, type Order, type Steer } from "../lib/store";
@@ -51,7 +51,7 @@ export default function CustomerTicket() {
   const season = seasonOf(order);
   const steer = steers.find((s) => s.id === order.steer);
   /* real money once the steer has been weighed, the estimate until then */
-  const price = finalPrice(order.share, steer, order.cutSheet);
+  const price = finalPrice(order.share, steer, order.cutSheet, order.groupSize ?? 1);
   const note = rateNote(price);
   const total = price?.total ?? SHARES[order.share].total;
   const readyOn = steer?.readyDate
@@ -122,7 +122,10 @@ export default function CustomerTicket() {
             </div>
           </>
         ) : (
-          <div className="ticket-row"><span className="k">Price per pound</span><span className="v">{money2(HANGING_RATE)}</span></div>
+          <div className="ticket-row"><span className="k">Price per pound</span><span className="v">{money2(rateFor(order.share, order.groupSize ?? 1))}</span></div>
+        )}
+        {price?.groupUnlocked && (
+          <div className="ticket-row"><span className="k">Group</span><span className="v">{price.groupSize} orders · {price.tier}-steer rate</span></div>
         )}
         {price && price.pattyCharge > 0 && (
           <>

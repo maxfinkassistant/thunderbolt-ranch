@@ -71,6 +71,24 @@ The script adds a **Steers** tab, **Steer** / **Season** columns to the order sh
 **Price per lb ($)** column to the Steers tab, all on its own. Every row in the Orders tab
 counts toward the front-page tracker, so delete the test rows first.
 
+### Deposit, pricing and groups (as of 2026-10-08)
+
+- **$500 deposit, card only, no fee.** The script creates a Stripe link per order; the
+  order is saved as *Awaiting deposit* and only counts toward the season — and only gets
+  the confirmation email — once Stripe shows it paid. Stripe sends the customer back to
+  `/#/order/confirmed/CODE`, which asks the script to verify. The Ranch Office shows unpaid
+  rows greyed with a **Check deposit** button; you can also set the status to Reserved by
+  hand if someone pays another way.
+- **The dashboard Payment Link** (`VITE_STRIPE_PAYMENT_LINK`) is now only a fallback if
+  the script can't make a link. **Change it to $500 in Stripe** so the fallback is right.
+- **Rates:** whole $6.00 · half $6.15 · quarter $6.25 per lb hanging. A steer's
+  "Price per lb" in the Steers tab is its *whole-share* rate; halves and quarters sit
+  their usual +$0.15 / +$0.25 above it.
+- **Groups:** every order code is a referral code. A friend entering it at checkout
+  joins the group; 1 friend → everyone pays the half rate, 3 friends → the whole rate.
+  Rates are applied at invoice time to orders whose deposit is in.
+- **Season:** Winter 2027, 20 steers; new orders roll to Spring 2027 when full.
+
 ### One-time: Stripe for invoices (≈2 min)
 
 The invoice email carries a card link for the customer's exact balance, and the

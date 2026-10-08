@@ -8,6 +8,7 @@ import {
   TBONE_YIELD, STRIP_YIELD, FILET_YIELD,
   steakCount, roastCount,
   DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST, HANGING_TYP, PATTY_RATE, PATTY_MIN_LBS, money,
+  SHARE_RATES, tierFor, rateFor,
   type ShareId,
 } from "../data/config";
 import { effectiveExtra, type CutSheetAnswers, type Steer } from "./store";
@@ -119,17 +120,16 @@ export interface Cost {
   balance: number;
   hangingLbs: number;
   takehomeLbs: number;
+  rate: number;       // $/lb hanging this order pays, at its tier
+  tier: ShareId;      // the rate tier — bigger than the share when a group earned it
 }
 
-export function shareCost(share: ShareId): Cost {
+export function shareCost(share: ShareId, groupSize = 1): Cost {
   const s = SHARES[share];
-  return {
-    total: s.total,
-    deposit: DEPOSIT,
-    balance: s.total - DEPOSIT,
-    hangingLbs: s.hanging,
-    takehomeLbs: s.takehome,
-  };
+  const tier = tierFor(share, groupSize);
+  const rate = rateFor(share, groupSize);
+  const total = Math.round(s.hanging * rate);
+  return { total, deposit: DEPOSIT, balance: total - DEPOSIT, hangingLbs: s.hanging, takehomeLbs: s.takehome, rate, tier };
 }
 
 export { HANGING_RATE, TAKEHOME_RATE_EST };
@@ -148,7 +148,10 @@ export { HANGING_RATE, TAKEHOME_RATE_EST };
 
 export interface FinalPrice {
   rate: number;          // $/lb actually charged
-  standardRate: number;  // what it would have been
+  standardRate: number;  // this tier's list rate
+  tier: ShareId;         // rate tier paid — bigger than the share when a group earned it
+  groupSize: number;
+  groupUnlocked: boolean;
   adjusted: boolean;     // rate came in under standard
   heavy: boolean;        // and the carcass is why
   hangingLbs: number;    // the whole animal
@@ -175,15 +178,20 @@ export function finalPrice(
   share: ShareId,
   steer?: Pick<Steer, "hangingWeight" | "rate"> | null,
   cutSheet?: CutSheetAnswers | null,
+  groupSize = 1,
 ): FinalPrice | null {
   const hangingLbs = steer?.hangingWeight;
   if (!hangingLbs || hangingLbs <= 0) return null;
 
-  const standardRate = HANGING_RATE;
-  const rate = steer?.rate && steer.rate > 0 ? steer.rate : standardRate;
+  /* the tier sets the list rate; a heavy-steer discount (entered on the
+     steer as a whole-share rate) comes off every tier by the same amount */
+  const tier = tierFor(share, groupSize);
+  const standardRate = SHARE_RATES[tier];
+  const steerDiscount = steer?.rate && steer.rate > 0 ? Math.max(0, Math.round((SHARE_RATES.whole - steer.rate) * 100) / 100) : 0;
+  const rate = Math.round((standardRate - steerDiscount) * 100) / 100;
   const shareLbs = Math.round(hangingLbs * SHARES[share].frac);
   const total = Math.round(shareLbs * rate);
-  const adjusted = rate < standardRate;
+  const adjusted = steerDiscount > 0;
 
   /* The patty fee is the butcher's, but it reaches them through us —
      the customer writes one check, to the ranch. */
@@ -194,6 +202,9 @@ export function finalPrice(
   return {
     rate,
     standardRate,
+    tier,
+    groupSize,
+    groupUnlocked: tier !== share,
     adjusted,
     /* only call the weight the reason when the weight actually is one */
     heavy: adjusted && hangingLbs > HANGING_TYP,
