@@ -17,7 +17,7 @@ export type ShareId = "quarter" | "half" | "whole";
 export const SHARE_RATES: Record<ShareId, number> = { whole: 6.0, half: 6.15, quarter: 6.25 };
 export const HANGING_RATE = SHARE_RATES.whole;    // the headline "from" rate
 export const TAKEHOME_RATE_EST = 8.57;            // whole-share take-home estimate, the "from" figure
-export const DEPOSIT = 500;                       // flat, all share sizes, card
+export const DEPOSIT = 300;                       // flat, all share sizes, card
 
 /* Friends needed — beyond you — to unlock a bigger share's rate. */
 export const GROUP_UNLOCK = { half: 1, whole: 3 } as const;

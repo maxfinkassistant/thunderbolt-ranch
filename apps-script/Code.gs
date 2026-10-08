@@ -50,7 +50,7 @@ const GROUP_UNLOCK = { half: 1, whole: 3 };     // friends beyond you
 const TIER_ORDER = ["quarter", "half", "whole"];
 function groupTier_(size) { return size >= GROUP_UNLOCK.whole + 1 ? "whole" : size >= GROUP_UNLOCK.half + 1 ? "half" : "quarter"; }
 function tierFor_(share, size) { const g = groupTier_(size || 1); return TIER_ORDER.indexOf(g) > TIER_ORDER.indexOf(share) ? g : share; }
-const DEPOSIT = 500;          // flat, every share size, card
+const DEPOSIT = 300;          // flat, every share size, card
 const HANGING_TYP = 1000;     // lb, a typical carcass — above this counts as heavy
 const PATTY_RATE = 0.5;       // $/lb — the butcher's patty charge, collected by us and passed on
 /* Card payments carry the processor's fee; bank (ACH) payments don't.
