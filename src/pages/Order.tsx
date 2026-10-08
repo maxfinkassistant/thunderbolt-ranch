@@ -237,6 +237,16 @@ export default function Order() {
             )}
           </div>
         )}
+        {share === "whole" && !joining && (
+          <div className="group-note" style={{ marginBottom: "var(--space-lg)" }}>
+            <span className="tag">Ordering with friends?</span>
+            <p className="small" style={{ margin: "var(--space-xs) 0 0" }}>
+              You've got the whole steer, so you're already at the best rate, {money2(SHARE_RATES.whole)}/lb — there's
+              nothing left for a group to unlock. Splitting it with friends is between you and them; one {money(DEPOSIT)} deposit
+              holds the animal and we cut it to your sheet.
+            </p>
+          </div>
+        )}
         {share && joining && (
           <div className="group-note" style={{ marginBottom: "var(--space-lg)" }}>
             <span className="tag">Joining {joining.organizer}'s group</span>
