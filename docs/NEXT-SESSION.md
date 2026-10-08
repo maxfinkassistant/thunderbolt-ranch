@@ -32,19 +32,19 @@ project: `project_christensen_ranch.md`.
 pattern in the git history (search commits for "cases, 0 mismatches"); re-run that idea
 after any pricing change.
 
+**Done since 2026-10-08 noon (verified live):** script redeployed (`?action=group&code=TR-NOPE`
+→ `{"ok":true,"group":null}`), tracker capacity 20 (availability answers `capacity:20`), $300
+Stripe fallback link set as `VITE_STRIPE_PAYMENT_LINK`, landing "split a steer" band fixed
+(it printed "Bring 0.5 friend" after GROUP_UNLOCK became steers' worth). The live order flow
+was walked to checkout as a quarter organizer with a half target and a $600 group deposit:
+math reads $600 today · $950 balance · $1,550 total. Not submitted — a real row + Stripe link.
+
 **Not yet done / waiting on Max:**
-1. The Apps Script in the repo is ahead of what's deployed. Max must paste
-   `apps-script/Code.gs` into script.google.com → Thunderbolt Orders and redeploy
-   (Manage deployments → pencil → New version). Probe pattern for "is the new script
-   live": GET `?action=group&code=TR-NOPE` should answer `{"ok":true,"group":null}` on the
-   new version. Backend URL is the `VITE_BACKEND_URL` repo variable (`gh variable list`).
-2. Ranch Office → Steers → tracker → set capacity to 20 (availability still reports 7).
-3. Stripe fallback deposit link: Max needs to make a $300 Payment Link and paste the URL;
-   set it with `gh variable set VITE_STRIPE_PAYMENT_LINK --body <url>` then
-   `gh workflow run deploy.yml`. Current fallback is still the $500 link.
-4. Dry run of the full order → deposit → confirmation → invite → invoice flow with Max's
-   own email, in test mode or live-then-refund.
-5. Optional: Twilio Script Properties for text invites (needs A2P 10DLC registration).
+1. Dry run of the full order → deposit → confirmation → invite → invoice flow with Max's
+   own email, in test mode or live-then-refund. The Orders sheet already holds one 0.25
+   reserved row (availability `reserved:0.25`) — delete it if it's a test before go-live.
+2. Optional: Twilio Script Properties for text invites (needs A2P 10DLC registration).
+3. The Ranch Office passcode (`ADMIN_KEY`) isn't in the repo or memory; Max logs in himself.
 
 **Conventions:** verify in the browser before claiming done (dev server:
 `preview_start christensen-ranch`, port 5176, path routing in dev / hash routing in
