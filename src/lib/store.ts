@@ -7,8 +7,11 @@
 
 import {
   MAIN_CUTS, EXTRA_GROUPS, SHARES, CURRENT_SEASON, SEASON_STEERS,
-  type ShareId, type CutMode, type SeasonId,
+  type ShareId, type CutMode, type SeasonId, type GroupTarget,
 } from "../data/config";
+
+/** What a group member sees about the others — first name and last initial, nothing more. */
+export interface GroupMember { code: string; name: string; share: ShareId; paid: boolean; you?: boolean }
 
 /** Keep-or-grind answer. Undefined means "not answered yet" — the
     barbecue / fast / workhorse groups make people choose. */
@@ -114,7 +117,14 @@ export interface Order {
   /* group ordering: the code a friend typed, and the group it joined */
   referral?: string;
   group?: string;          // root order code of the group (own code when they started one)
+  groupTarget?: GroupTarget;   // what the group is filling — set by whoever started it
   groupSize?: number;      // confirmed orders in the group, from the order system
+  groupFrac?: number;      // confirmed steers' worth in the group, from the order system
+  groupMembers?: GroupMember[];  // who's in, and whose deposit is in — from the order system
+  /* the deposit: one $300 per order, one $600 from an organizer that
+     covers the group, or $0 because an organizer's $600 covers you */
+  depositKind?: "single" | "group" | "covered";
+  depositAmount?: number;
   depositUrl?: string;     // only while pending, only to the customer
   depositPaidAt?: string;
   /* final-invoice workflow — stamped by the order system, read-only here */

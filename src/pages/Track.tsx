@@ -101,7 +101,7 @@ export default function Track() {
   /* the live backend hands back this order's own animal; in local demo
      mode the steers are right here in the browser */
   const weighed = pricing ?? (backendConfigured() ? undefined : listSteers().find((s) => s.id === order.steer));
-  const price = finalPrice(viewShare, weighed, order.cutSheet, order.groupSize ?? 1);
+  const price = finalPrice(viewShare, weighed, order.cutSheet, order.groupFrac, order.depositAmount ?? DEPOSIT);
   const note = rateNote(price);
   const whenFor = (stepId: string): string => {
     switch (stepId) {
@@ -210,7 +210,7 @@ export default function Track() {
 
       {!order.sample && order.status !== "pending-deposit" && (
         <div style={{ marginTop: "var(--space-xl)" }}>
-          <GroupPanel code={order.code} share={order.share} size={order.groupSize ?? 1} email={order.email} />
+          <GroupPanel code={order.code} share={order.share} frac={order.groupFrac} target={order.groupTarget} members={order.groupMembers} depositKind={order.depositKind} email={order.email} />
         </div>
       )}
 

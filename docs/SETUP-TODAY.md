@@ -84,9 +84,15 @@ counts toward the front-page tracker, so delete the test rows first.
 - **Rates:** whole $6.00 · half $6.10 · quarter $6.20 per lb hanging. A steer's
   "Price per lb" in the Steers tab is its *whole-share* rate; halves and quarters sit
   their usual +$0.10 / +$0.20 above it.
-- **Groups:** every order code is a referral code. A friend entering it at checkout
-  joins the group; 1 friend → everyone pays the half rate, 3 friends → the whole rate.
-  Rates are applied at invoice time to orders whose deposit is in.
+- **Groups:** every order code is a referral code. An organizer (quarter or half) picks what
+  the group is filling — **a half (2 quarters) or a whole (4 quarters / 2 halves)** — and how
+  the deposit works: **one $600 from the organizer that covers everyone**, or **$300 per
+  order**. Friends who join a $600 group reserve with no deposit; if they join before the
+  organizer has paid, they're held and flip to reserved the moment the $600 lands. The $600
+  is credited to the organizer's invoice; covered friends pay their full share at invoice
+  time. Rates follow the group's **confirmed steers' worth**: half a steer → the half rate,
+  a whole → the whole rate, for everyone in it. Members see each other (first name + last
+  initial) and whose deposit is in, on the confirmation and tracking pages.
 - **Season:** Winter 2027, 20 steers; new orders roll to Spring 2027 when full.
 
 ### Group invites by text (optional, ≈5 min)

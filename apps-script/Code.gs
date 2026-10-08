@@ -46,11 +46,13 @@ const SHARE_FRAC = { quarter: 0.25, half: 0.5, whole: 1 };
    unlocks the bigger share's rate for everyone in it. Mirrors
    SHARE_RATES / GROUP_UNLOCK / tierFor in src/data/config.ts. */
 const SHARE_RATES = { whole: 6.0, half: 6.10, quarter: 6.20 };
-const GROUP_UNLOCK = { half: 1, whole: 3 };     // friends beyond you
+const GROUP_UNLOCK = { half: 0.5, whole: 1 };   // steers' worth the group has confirmed
 const TIER_ORDER = ["quarter", "half", "whole"];
-function groupTier_(size) { return size >= GROUP_UNLOCK.whole + 1 ? "whole" : size >= GROUP_UNLOCK.half + 1 ? "half" : "quarter"; }
-function tierFor_(share, size) { const g = groupTier_(size || 1); return TIER_ORDER.indexOf(g) > TIER_ORDER.indexOf(share) ? g : share; }
-const DEPOSIT = 300;          // flat, every share size, card
+function groupTier_(frac) { return frac >= GROUP_UNLOCK.whole - 1e-6 ? "whole" : frac >= GROUP_UNLOCK.half - 1e-6 ? "half" : "quarter"; }
+/* the rate tier an order pays: its own share, or better if its group's confirmed fraction earned it */
+function tierFor_(share, frac) { const g = groupTier_(frac == null ? (SHARE_FRAC[share] || 0) : frac); return TIER_ORDER.indexOf(g) > TIER_ORDER.indexOf(share) ? g : share; }
+const DEPOSIT = 300;          // per order, card
+const GROUP_DEPOSIT = 600;    // one from the organizer covers the whole group
 const HANGING_TYP = 1000;     // lb, a typical carcass — above this counts as heavy
 const PATTY_RATE = 0.5;       // $/lb — the butcher's patty charge, collected by us and passed on
 /* Card payments carry the processor's fee; bank (ACH) payments don't.
@@ -67,6 +69,7 @@ const HEADERS = [
   "Signed by", "Signed at", "Paid at", "Butcher sent at", "Payment state",
   "Card link id", "Card link URL",
   "Referral", "Group", "Deposit link id", "Deposit link URL", "Deposit paid at",
+  "Deposit kind", "Deposit amount", "Group target",
 ];
 const COL_STATUS = 3, COL_STEER = 15, COL_SEASON = 16;
 /* final-invoice workflow columns (1-based) */
@@ -74,7 +77,8 @@ const COL_INVOICED = 17, COL_PLINK_ID = 18, COL_PLINK_URL = 19, COL_TOKEN = 20,
       COL_SIGNED_BY = 21, COL_SIGNED_AT = 22, COL_PAID_AT = 23, COL_BUTCHER_AT = 24,
       COL_PAY_STATE = 25,   // "paid" | "pending" (ACH clearing) | ""
       COL_CARD_ID = 26, COL_CARD_URL = 27,   // the card link (+fee); 18/19 are the ACH link
-      COL_REFERRAL = 28, COL_GROUP = 29, COL_DEP_ID = 30, COL_DEP_URL = 31, COL_DEP_PAID = 32;
+      COL_REFERRAL = 28, COL_GROUP = 29, COL_DEP_ID = 30, COL_DEP_URL = 31, COL_DEP_PAID = 32,
+      COL_DEP_KIND = 33, COL_DEP_AMT = 34, COL_TARGET = 35;
 
 const SITE_URL = "https://thunderboltbeef.com";
 const RANCH_INBOX = "thunderboltbeef@gmail.com";
@@ -185,17 +189,43 @@ function availability_() {
   return { season: CURRENT_SEASON, capacity: s.capacity, reserved: online + s.offline };
 }
 
-/* Confirmed orders per group, keyed by the group's root code. */
-function groupSizes_(orders) {
-  const sizes = {};
-  (orders || rows_().map(orderFromRow_).filter(Boolean)).forEach(o => {
-    if (o.status === "pending-deposit") return;
+/* Everything about every group, keyed by root code: confirmed count,
+   confirmed steers' worth, who's in, what they're filling, how the
+   deposit works. One pass over the sheet. */
+function groupInfo_(orders) {
+  const all = orders || rows_().map(orderFromRow_).filter(Boolean);
+  const g = {};
+  all.forEach(o => {
     const root = o.group || o.code;
-    sizes[root] = (sizes[root] || 0) + 1;
+    const info = g[root] || (g[root] = { root: root, size: 0, frac: 0, members: [], target: "whole", depositKind: "single", depositPaid: false, organizer: "" });
+    const paid = o.status !== "pending-deposit";
+    if (paid) { info.size += 1; info.frac += SHARE_FRAC[o.share] || 0; }
+    info.members.push({ code: o.code, name: shortName_(o.name), share: o.share, paid: paid });
+    if (o.code === root) {
+      info.target = o.groupTarget || (o.share === "half" ? "whole" : "half");
+      info.depositKind = o.depositKind === "group" ? "group" : "single";
+      info.depositPaid = paid;
+      info.organizer = shortName_(o.name);
+    }
   });
-  return sizes;
+  Object.keys(g).forEach(k => { g[k].frac = Math.round(g[k].frac * 100) / 100; });
+  return g;
 }
-function groupSizeOf_(order, sizes) { return (sizes || groupSizes_())[order.group || order.code] || 1; }
+function shortName_(name) {
+  const parts = String(name || "").trim().split(/\s+/);
+  return parts.length > 1 ? parts[0] + " " + parts[parts.length - 1].charAt(0) + "." : parts[0] || "";
+}
+/* stamp an order with its group's numbers for the site */
+function withGroup_(o, groups) {
+  const info = (groups || groupInfo_())[o.group || o.code];
+  if (!info) { o.groupSize = 1; o.groupFrac = SHARE_FRAC[o.share] || 0; return o; }
+  o.groupSize = Math.max(1, info.size);
+  o.groupFrac = Math.max(SHARE_FRAC[o.share] || 0, info.frac);
+  o.groupTarget = info.target;
+  o.groupMembers = info.members.map(m => ({ code: m.code, name: m.name, share: m.share, paid: m.paid, you: m.code === o.code }));
+  return o;
+}
+function groupSizeOf_(order, groups) { const i = (groups || groupInfo_())[order.group || order.code]; return i ? Math.max(1, i.size) : 1; }
 
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
@@ -224,6 +254,9 @@ function orderFromRow_(r) {
     if (r[27]) o.referral = String(r[27]);
     o.group = String(r[28] || "").trim() || o.code;
     if (r[31]) o.depositPaidAt = dateText_(r[31]);
+    o.depositKind = String(r[32] || "single");
+    o.depositAmount = r[33] === "" || r[33] == null ? DEPOSIT : Number(r[33]);
+    if (r[34]) o.groupTarget = String(r[34]);
     return o;
   } catch (e) {
     return null;
@@ -244,13 +277,26 @@ function doGet_(e) {
     const order = row ? orderFromRow_(row) : null;
     /* their own animal's weight and rate — never the whole roster */
     if (order) {
-      order.groupSize = groupSizeOf_(order);
+      withGroup_(order);
       if (order.status === "pending-deposit" && row[30]) order.depositUrl = String(row[30]);
     }
     const out = { ok: true, order: order };
     const pricing = order ? publicPricing_(steerFor_(order)) : null;
     if (pricing) out.pricing = pricing;
     return json_(out);
+  }
+  if (q.action === "group" && q.code) {
+    /* a friend typing a code at checkout: what would they be joining? */
+    const code = String(q.code).toUpperCase();
+    const row = rows_().find(r => String(r[0]).toUpperCase() === code);
+    if (!row) return json_({ ok: true, group: null });
+    const o = orderFromRow_(row);
+    const info = groupInfo_()[o.group || o.code];
+    return json_({ ok: true, group: info ? {
+      root: info.root, organizer: info.organizer, target: info.target, depositKind: info.depositKind,
+      depositPaid: info.depositPaid, frac: info.frac,
+      members: info.members.map(m => ({ name: m.name, share: m.share, paid: m.paid })),
+    } : null });
   }
   if (q.action === "deposit" && q.code) {
     /* Has the deposit landed? Stripe is asked; if yes the order flips to
@@ -262,7 +308,7 @@ function doGet_(e) {
     const row = sh.getRange(at, 1, 1, HEADERS.length).getValues()[0];
     const order = orderFromRow_(row);
     if (order.status !== "pending-deposit") {
-      order.groupSize = groupSizeOf_(order);
+      withGroup_(order);
       return json_({ ok: true, paid: true, order: order });
     }
     let paid = false;
@@ -273,11 +319,13 @@ function doGet_(e) {
     sh.getRange(at, COL_STATUS).setValue("reserved");
     sh.getRange(at, COL_DEP_PAID).setValue(new Date().toISOString());
     order.status = "reserved";
-    order.groupSize = groupSizeOf_(order);
     const summary = String(row[11] || "");
     const cost = { total: row[8], deposit: row[9], balance: row[10] };
     try { notifyRanch_(order, summary, cost); } catch (err) { /* don't fail the customer for a ranch email */ }
-    try { confirmCustomer_(order, summary, cost, null, true); } catch (err) { /* ditto */ }
+    try { confirmCustomer_(withGroup_(order), summary, cost, null, true); } catch (err) { /* ditto */ }
+    /* an organizer's group deposit also covers friends who joined before it landed */
+    if (order.depositKind === "group") releaseCovered_(order.code);
+    withGroup_(order);
     return json_({ ok: true, paid: true, order: order });
   }
   if (q.action === "confirm" && q.code) {
@@ -287,15 +335,14 @@ function doGet_(e) {
     const row = rows_().find(r => String(r[0]).toUpperCase() === code);
     if (!row) return json_({ ok: false, error: "no order " + code });
     if (!tokenOk_(row, q.t)) return json_({ ok: false, error: "that link isn't valid — open it from your invoice email" });
-    const order = orderFromRow_(row);
-    order.groupSize = groupSizeOf_(order);
+    const order = withGroup_(orderFromRow_(row));
     const out = { ok: true, order: order, butcherPhone: BUTCHER_PHONE, paid: !!row[22] };
     const pricing = publicPricing_(steerFor_(order));
     if (pricing) out.pricing = pricing;
     if (row[18]) out.payUrl = String(row[18]);          // bank (ACH), at the balance
     if (row[26]) out.cardUrl = String(row[26]);         // card, balance + fee
     out.cardFeePct = CARD_FEE_PCT;
-    const price = priceFor_(order, steerFor_(order), order.groupSize);
+    const price = priceFor_(order, steerFor_(order), order.groupFrac);
     if (price) out.cardAmount = cardAmount_(price.balance);
     return json_(out);
   }
@@ -303,7 +350,7 @@ function doGet_(e) {
     if (!isAdmin_(q.key)) return json_({ ok: false, error: "bad key" });
     return json_({
       ok: true,
-      orders: (function () { const all = rows_().map(orderFromRow_).filter(Boolean); const sizes = groupSizes_(all); all.forEach(o => { o.groupSize = groupSizeOf_(o, sizes); }); return all; })(),
+      orders: (function () { const all = rows_().map(orderFromRow_).filter(Boolean); const groups = groupInfo_(all); all.forEach(o => withGroup_(o, groups)); return all; })(),
       steers: steers_(),
       settings: settings_(),
     });
@@ -373,10 +420,9 @@ function doPost_(e) {
     const name = String(body.name || "").trim();
     if (!name) return json_({ ok: false, error: "name required" });
     if (!body.pdf) return json_({ ok: false, error: "signed sheet missing" });
-    const order = orderFromRow_(row);
-    order.groupSize = groupSizeOf_(order);
+    const order = withGroup_(orderFromRow_(row));
     const steer = steerFor_(order);
-    const price = priceFor_(order, steer, order.groupSize);
+    const price = priceFor_(order, steer, order.groupFrac);
     const now = new Date();
 
     sh.getRange(at, COL_SIGNED_BY).setValue(name);
@@ -417,43 +463,83 @@ function doPost_(e) {
     /* a friend's code puts this order in their group (chains collapse
        onto the same root); otherwise it starts its own */
     let referral = String(body.referral || o.referral || "").trim().toUpperCase();
-    let group = o.code;
+    let group = o.code, rootInfo = null;
     if (referral) {
       const refRow = rows_().find(r => String(r[0]).toUpperCase() === referral);
-      if (refRow) { const ref = orderFromRow_(refRow); group = ref.group || ref.code; }
+      if (refRow) { const ref = orderFromRow_(refRow); group = ref.group || ref.code; rootInfo = groupInfo_()[group] || null; }
       else referral = "";
     }
 
-    /* the deposit: a card-only Stripe link for exactly DEPOSIT that
-       brings them back to the site. Saved as pending until it's paid. */
+    /* the deposit: $300 for an order on its own, $600 from an organizer
+       covering the group, $0 for a friend an organizer's $600 covers.
+       The sheet decides the kind from what it can see, not the browser. */
+    let kind = "single";
+    if (rootInfo && group !== o.code) kind = rootInfo.depositKind === "group" ? "covered" : "single";
+    else if (String(body.depositKind) === "group" && o.share !== "whole") kind = "group";
+    const amount = kind === "group" ? GROUP_DEPOSIT : kind === "covered" ? 0 : DEPOSIT;
+    const target = group === o.code && o.share !== "whole" ? (String(body.groupTarget) === "half" && o.share === "quarter" ? "half" : "whole") : "";
+    o.depositKind = kind; o.depositAmount = amount; if (target) o.groupTarget = target;
+    cost.deposit = amount; cost.balance = Number(cost.total || 0) - amount;
+
+    /* covered: nothing to pay now — reserved outright if the organizer's
+       deposit is in, otherwise held until it lands */
+    const reservedNow = kind === "covered" && rootInfo && rootInfo.depositPaid;
     let depId = "", depUrl = "";
-    if (stripeKey_()) {
-      try {
-        const link = makeLink_(o, DEPOSIT, "deposit", "card", SITE_URL + "/#/order/confirmed/" + o.code + "?paid=1");
-        depId = link.id; depUrl = link.url;
-      } catch (err) { depUrl = String(body.depositLink || ""); }
-    } else {
-      depUrl = String(body.depositLink || "");
+    if (amount > 0) {
+      if (stripeKey_()) {
+        try {
+          const link = makeLink_(o, amount, kind === "group" ? "group deposit" : "deposit", "card", SITE_URL + "/#/order/confirmed/" + o.code + "?paid=1");
+          depId = link.id; depUrl = link.url;
+        } catch (err) { depUrl = String(body.depositLink || ""); }
+      } else {
+        depUrl = String(body.depositLink || "");
+      }
     }
 
     sheet_().appendRow([
-      o.code, new Date(o.createdAt || Date.now()), "pending-deposit",
+      o.code, new Date(o.createdAt || Date.now()), reservedNow ? "reserved" : "pending-deposit",
       o.name, o.email, o.phone, o.address,
       o.share, cost.total, cost.deposit, cost.balance,
       summary, (o.cutSheet && o.cutSheet.notes) || "", JSON.stringify(o),
       "", o.season,
       "", "", "", "", "", "", "", "", "", "", "",
-      referral, group, depId, depUrl, "",
+      referral, group, depId, depUrl, reservedNow ? new Date().toISOString() : "",
+      kind, amount, target,
     ]);
     const emailErrors = [];
-    try { pendingCustomer_(o, summary, depUrl); } catch (err) { emailErrors.push("customer: " + (err && err.message || err)); }
-    return json_({ ok: true, code: o.code, season: o.season, depositUrl: depUrl, groupSize: 1, emailErrors: emailErrors });
+    if (reservedNow) {
+      o.status = "reserved";
+      try { notifyRanch_(o, summary, cost); } catch (err) { emailErrors.push("ranch: " + (err && err.message || err)); }
+      try { confirmCustomer_(withGroup_(o), summary, cost, null, true); } catch (err) { emailErrors.push("customer: " + (err && err.message || err)); }
+    } else {
+      try { pendingCustomer_(o, summary, depUrl); } catch (err) { emailErrors.push("customer: " + (err && err.message || err)); }
+    }
+    return json_({ ok: true, code: o.code, season: o.season, depositUrl: depUrl, status: reservedNow ? "reserved" : "pending-deposit", depositAmount: amount, emailErrors: emailErrors });
   }
 
   return json_({ ok: false, error: "unknown action" });
 }
 
 /* ---------------- back office writes (key already checked) ---------------- */
+
+/* After an organizer's group deposit lands: every covered friend who
+   joined early is reserved and told so. */
+function releaseCovered_(root) {
+  const sh = sheet_();
+  const rows = rows_();
+  rows.forEach((r, i) => {
+    const o = orderFromRow_(r);
+    if (!o || o.code === root || (o.group || o.code) !== root) return;
+    if (o.status !== "pending-deposit" || o.depositKind !== "covered") return;
+    const at = i + 2;
+    sh.getRange(at, COL_STATUS).setValue("reserved");
+    sh.getRange(at, COL_DEP_PAID).setValue(new Date().toISOString());
+    o.status = "reserved";
+    const summary = String(r[11] || ""), cost = { total: r[8], deposit: 0, balance: r[8] };
+    try { notifyRanch_(o, summary, cost); } catch (err) { /* keep going */ }
+    try { confirmCustomer_(withGroup_(o), summary, cost, null, true); } catch (err) { /* keep going */ }
+  });
+}
 
 function orderRow_(code) {
   const i = rows_().findIndex(r => String(r[0]).toUpperCase() === String(code).toUpperCase());
@@ -538,10 +624,9 @@ function adminPost_(body) {
     if (at < 0) return json_({ ok: false, error: "no order " + code });
     const sh = sheet_();
     const row = sh.getRange(at, 1, 1, HEADERS.length).getValues()[0];
-    const order = orderFromRow_(row);
-    order.groupSize = groupSizeOf_(order);
+    const order = withGroup_(orderFromRow_(row));
     const steer = steerFor_(order);
-    const price = priceFor_(order, steer, order.groupSize);
+    const price = priceFor_(order, steer, order.groupFrac);
     /* the browser asks; the sheet decides what the bill actually is */
     if (!price) return json_({ ok: false, error: "that order's steer has no hanging weight yet" });
     if (!order.email) return json_({ ok: false, error: "that order has no email address" });
@@ -614,12 +699,12 @@ function relink_(from, to) {
 /* The final money for one order, once its steer has a weight. Mirrors
    finalPrice() in src/lib/estimate.ts — keep the two in step. Returns
    null while the animal is still unweighed. */
-function priceFor_(order, steer, groupSize) {
+function priceFor_(order, steer, groupFrac) {
   if (!steer || !(Number(steer.hangingWeight) > 0)) return null;
   const hangingLbs = Number(steer.hangingWeight);
   /* the tier sets the list rate; a heavy-steer discount (entered on the
      steer as a whole-share rate) comes off every tier by the same amount */
-  const tier = tierFor_(order.share, groupSize || 1);
+  const tier = tierFor_(order.share, groupFrac);
   const standardRate = SHARE_RATES[tier];
   const steerDiscount = Number(steer.rate) > 0 ? Math.max(0, Math.round((SHARE_RATES.whole - Number(steer.rate)) * 100) / 100) : 0;
   const rate = Math.round((standardRate - steerDiscount) * 100) / 100;
@@ -631,11 +716,12 @@ function priceFor_(order, steer, groupSize) {
   const pattyLbs = pattyPounds_(order.cutSheet);
   const pattyCharge = Math.round(pattyLbs * PATTY_RATE);
   const billTotal = total + pattyCharge;
+  const deposit = order.depositAmount == null ? DEPOSIT : Number(order.depositAmount);
   return {
     rate: rate,
     standardRate: standardRate,
     tier: tier,
-    groupSize: groupSize || 1,
+    groupFrac: groupFrac == null ? (SHARE_FRAC[order.share] || 0) : groupFrac,
     groupUnlocked: tier !== order.share,
     adjusted: adjusted,
     heavy: adjusted && hangingLbs > HANGING_TYP,
@@ -645,8 +731,8 @@ function priceFor_(order, steer, groupSize) {
     pattyLbs: pattyLbs,
     pattyCharge: pattyCharge,
     total: billTotal,
-    deposit: DEPOSIT,
-    balance: billTotal - DEPOSIT,
+    deposit: deposit,
+    balance: billTotal - deposit,
     saved: adjusted ? Math.round(shareLbs * steerDiscount) : 0,
   };
 }
@@ -767,7 +853,8 @@ function confirmCustomer_(o, summary, cost, depositLink, paid) {
     harvestLine,
     "",
     paid
-      ? "Deposit received — " + money_(DEPOSIT) + ". Your " + share + " is reserved."
+      ? (o.depositKind === "covered" ? "Your share is covered by your organizer's group deposit — reserved, nothing to pay now."
+        : "Deposit received — " + money_(o.depositAmount == null ? DEPOSIT : o.depositAmount) + (o.depositKind === "group" ? " (your group deposit, which covers your friends too)" : "") + ". Your " + share + " is reserved.")
       : depositLink
         ? "PAY YOUR " + money_(DEPOSIT) + " DEPOSIT: " + depositLink
         : "We'll reach out shortly to collect your " + money_(DEPOSIT) + " deposit.",
@@ -797,7 +884,7 @@ function confirmCustomer_(o, summary, cost, depositLink, paid) {
     '<p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#555;margin:0 0 18px">Order code <b style="font-family:monospace;font-size:15px;color:#2b2521">' + esc_(o.code) + '</b> · ' + esc_(harvestLine) + '</p>',
     '<div style="margin:0 0 22px;padding:18px;background:#2b2521;color:#f3eee6;border-radius:4px">',
     paid
-      ? '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c8a85a">Deposit received</div><p style="margin:8px 0;font-size:18px">' + money_(DEPOSIT) + ' — your ' + esc_(share) + ' is reserved. &#10003;</p>'
+      ? '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c8a85a">' + (o.depositKind === "covered" ? 'Covered by your group' : 'Deposit received') + '</div><p style="margin:8px 0;font-size:18px">' + (o.depositKind === "covered" ? 'Your organizer\'s group deposit covers you' : money_(o.depositAmount == null ? DEPOSIT : o.depositAmount) + (o.depositKind === "group" ? ' group deposit' : '')) + ' — your ' + esc_(share) + ' is reserved. &#10003;</p>'
       : depositLink
         ? '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c8a85a">One step to hold your share</div><div style="margin:10px 0 8px">' + btn(depositLink, 'Pay your ' + money_(DEPOSIT) + ' deposit', '#b08d45') + '</div>'
         : '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c8a85a">Deposit</div><p style="margin:8px 0">We\'ll reach out shortly to collect your ' + money_(DEPOSIT) + ' deposit.</p>',
@@ -959,7 +1046,7 @@ function payLinkState_(ids) {
 
 function moneyLines_(o, price) {
   const lines = ["Beef: " + price.shareLbs + " lb × $" + price.rate.toFixed(2) + "/lb = " + money_(price.beefTotal)
-    + (price.groupUnlocked ? "   (group of " + price.groupSize + " — " + price.tier + "-steer rate)" : "")];
+    + (price.groupUnlocked ? "   (your group filled " + (price.tier === "whole" ? "a whole steer" : "half a steer") + " — " + price.tier + "-steer rate)" : "")];
   if (price.pattyCharge > 0) {
     lines.push("Patties: " + price.pattyLbs + " lb × $" + PATTY_RATE.toFixed(2) + "/lb = " + money_(price.pattyCharge) + "  (the butcher's charge for pressing them, which we pay and add here)");
     lines.push("Total: " + money_(price.total));
@@ -1158,6 +1245,9 @@ function inviteSms_(order, name, to) {
 function inviteEmail_(order, name, to) {
   const first = (order.name || "").split(" ")[0];
   const link = SITE_URL + "/#/order?ref=" + order.code;
+  const info = groupInfo_()[order.group || order.code] || {};
+  const filling = info.target === "half" ? "half a steer" : "a whole steer";
+  const covered = info.depositKind === "group";
   const hi = name ? "Hi " + esc_(name.split(" ")[0]) + "," : "Hi,";
   const subject = first + " invited you to split a steer — Thunderbolt Ranch";
   const text = [
@@ -1172,7 +1262,8 @@ function inviteEmail_(order, name, to) {
     "Order here (the code is filled in for you): " + link,
     "Code: " + order.code,
     "",
-    "You get your own cut sheet — your beef, your way. $" + DEPOSIT + " deposit holds your share.",
+    "You get your own cut sheet — your beef, your way. " + (covered ? first + "'s group deposit covers you — nothing to pay up front." : "$" + DEPOSIT + " deposit holds your share."),
+    "The group is filling " + filling + ".",
     "",
     "— Thunderbolt Ranch · Ranch to Table · thunderboltbeef.com",
   ].join("\n");
@@ -1187,7 +1278,7 @@ function inviteEmail_(order, name, to) {
     + '<tr><td style="padding:6px 14px 6px 0;color:#7a3b22;font-family:monospace;font-size:12px">3 FRIENDS</td><td>everyone pays the whole-steer rate, $' + SHARE_RATES.whole.toFixed(2) + '/lb</td></tr>'
     + '</table>'
     + '<p style="margin:18px 0">' + btn(link, "Order with " + esc_(first) + "'s code", '#7a3b22') + '</p>'
-    + '<p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#555">The code <b style="font-family:monospace">' + esc_(order.code) + '</b> is filled in for you. You get your own cut sheet — your beef, your way. A $' + DEPOSIT + ' deposit holds your share.</p>'
+    + '<p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#555">The code <b style="font-family:monospace">' + esc_(order.code) + '</b> is filled in for you. The group is filling ' + filling + '. You get your own cut sheet — your beef, your way. ' + (covered ? esc_(first) + '\'s group deposit covers you — nothing to pay up front.' : 'A $' + DEPOSIT + ' deposit holds your share.') + '</p>'
     + '<p style="color:#888;font-size:13px">— Thunderbolt Ranch · Ranch to Table · <a href="' + SITE_URL + '" style="color:#7a3b22">thunderboltbeef.com</a></p></div>';
   MailApp.sendEmail({ to: to, subject: subject, body: text, htmlBody: html, name: "Thunderbolt Ranch", replyTo: RANCH_INBOX });
 }

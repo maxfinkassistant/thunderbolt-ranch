@@ -3,12 +3,20 @@
    confirmed order in the group pays the unlocked rate. */
 
 import { useState } from "react";
-import { SHARE_RATES, GROUP_UNLOCK, SITE_URL, tierFor, money2, type ShareId } from "../data/config";
+import { SHARES, SHARE_RATES, SITE_URL, GROUP_DEPOSIT, tierFor, groupTier, targetQuarters, money2, type ShareId, type GroupTarget } from "../data/config";
 import { backendConfigured, sendInvites, type Invite, type InviteResult } from "../lib/api";
+import type { GroupMember } from "../lib/store";
 
 const blankRow = (): Invite => ({ name: "", email: "", phone: "" });
 
-export default function GroupPanel({ code, share, size, email }: { code: string; share: ShareId; size: number; email?: string }) {
+export default function GroupPanel({ code, share, frac, target, members, depositKind, email }: {
+  code: string; share: ShareId; frac?: number; target?: GroupTarget; members?: GroupMember[];
+  depositKind?: "single" | "group" | "covered"; email?: string;
+}) {
+  const groupFrac = frac ?? SHARES[share].frac;
+  const goal: GroupTarget = target ?? (share === "half" ? "whole" : "half");
+  const quartersIn = Math.round(groupFrac * 4);
+  const quartersGoal = targetQuarters(goal);
   const [copied, setCopied] = useState(false);
   const [rows, setRows] = useState<Invite[]>([blankRow(), blankRow()]);
   const [sending, setSending] = useState(false);
@@ -30,15 +38,16 @@ export default function GroupPanel({ code, share, size, email }: { code: string;
     finally { setSending(false); }
   };
   const link = `${SITE_URL}/#/order?ref=${code}`;
-  const eff = tierFor(share, size);            // the rate tier they actually pay now
+  const eff = tierFor(share, groupFrac);        // the rate tier they actually pay now
   const unlocked = eff !== share;
-  const needHalf = Math.max(0, GROUP_UNLOCK.half + 1 - size);
-  const needWhole = Math.max(0, GROUP_UNLOCK.whole + 1 - size);
-  const next = eff === "quarter" ? { n: needHalf, rate: SHARE_RATES.half, label: "half-steer" }
-    : eff === "half" ? { n: needWhole, rate: SHARE_RATES.whole, label: "whole-steer" }
+  const quartersToHalf = Math.max(0, 2 - quartersIn);
+  const quartersToWhole = Math.max(0, 4 - quartersIn);
+  const next = eff === "quarter" ? { n: quartersToHalf, rate: SHARE_RATES.half, label: "half-steer" }
+    : eff === "half" ? { n: quartersToWhole, rate: SHARE_RATES.whole, label: "whole-steer" }
     : null;
+  const q = (n: number) => `${n} more quarter${n === 1 ? "" : "s"}`;
 
-  const subject = "Split a steer with me — Thunderbolt Ranch";
+  const subject = `Split a ${goal} steer with me — Thunderbolt Ranch`;
   const body = `I'm ordering beef from Thunderbolt Ranch — one Colorado Angus, cut however you want it. `
     + `If you order with my code we all pay less per pound: one friend gets everyone the half-steer rate (${money2(SHARE_RATES.half)}/lb), `
     + `three gets us all the whole-steer rate (${money2(SHARE_RATES.whole)}/lb).\n\nOrder here and my code is filled in for you: ${link}\n\nCode: ${code}`;
@@ -52,18 +61,32 @@ export default function GroupPanel({ code, share, size, email }: { code: string;
   return (
     <div className="group-panel">
       <div className="group-head">
-        <span className="tag">Split a steer with friends</span>
-        <span className="group-count">{size} of {GROUP_UNLOCK.whole + 1}</span>
+        <span className="tag">Splitting a {goal} steer with friends</span>
+        <span className="group-count">{quartersIn} of {quartersGoal}</span>
       </div>
       <div className="group-dots" aria-hidden="true">
-        {Array.from({ length: GROUP_UNLOCK.whole + 1 }, (_, i) => <span key={i} className={i < size ? "on" : ""} />)}
+        {Array.from({ length: quartersGoal }, (_, i) => <span key={i} className={i < quartersIn ? "on" : ""} />)}
       </div>
+      {members && members.length > 0 && (
+        <ul className="group-members">
+          {members.map((m) => (
+            <li key={m.code} className={m.paid ? "paid" : "unpaid"}>
+              <span className="group-tick" aria-hidden="true">{m.paid ? "✓" : "…"}</span>
+              <span>{m.name}{m.you ? " (you)" : ""}</span>
+              <span className="mute">{SHARES[m.share].label.toLowerCase()}</span>
+              <span className="mute">{m.paid ? "deposit in" : "deposit pending"}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {depositKind === "group" && <p className="small mute">Your {money2(GROUP_DEPOSIT).replace(".00", "")} group deposit covers everyone who joins — friends reserve with no deposit of their own.</p>}
+      {depositKind === "covered" && <p className="small mute">Your deposit is covered by the organizer's group deposit.</p>}
       <p className="group-line">
         {eff === "whole"
           ? <>Your group has the <b>whole-steer rate — {money2(SHARE_RATES.whole)}/lb</b> for everyone.</>
           : unlocked
-            ? <>Your group unlocked the <b>{eff}-steer rate — {money2(SHARE_RATES[eff])}/lb</b>.{next && next.n > 0 && <> {next.n} more friend{next.n > 1 ? "s" : ""} → {money2(next.rate)}/lb for everyone.</>}</>
-            : <>You're at <b>{money2(SHARE_RATES[share])}/lb</b>, the {share}-steer rate.{next && <> Get <b>{next.n} friend{next.n > 1 ? "s" : ""}</b> to order with your code and everyone pays the {next.label} rate, {money2(next.rate)}/lb.</>}</>}
+            ? <>Your group has the <b>{eff}-steer rate — {money2(SHARE_RATES[eff])}/lb</b>.{next && next.n > 0 && <> {q(next.n)} → {money2(next.rate)}/lb for everyone.</>}</>
+            : <>You're at <b>{money2(SHARE_RATES[share])}/lb</b>, the {share}-steer rate.{next && <> {q(next.n)} ordered with your code and everyone pays the {next.label} rate, {money2(next.rate)}/lb.</>}</>}
       </p>
       <div className="group-code">
         <span className="tag">Your code</span>

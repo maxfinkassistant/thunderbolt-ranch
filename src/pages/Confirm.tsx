@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { SHARES, PROCESSOR, RANCH_CONTACT, PAYABLE_TO, PATTY_RATE, seasonOf, money, money2 } from "../data/config";
+import { SHARES, DEPOSIT, PROCESSOR, RANCH_CONTACT, PAYABLE_TO, PATTY_RATE, seasonOf, money, money2 } from "../data/config";
 import { boxSummary, finalPrice, rateNote } from "../lib/estimate";
 import { buildSignedCutSheet, bytesToBase64 } from "../lib/cutsheetPdf";
 import { backendConfigured, fetchConfirm, submitConfirm, type ConfirmView } from "../lib/api";
@@ -52,7 +52,7 @@ export default function Confirm() {
   const steer: Steer | undefined = pricing
     ? { id: pricing.steerId ?? order.steer ?? "", season: seasonOf(order).id, hangingWeight: pricing.hangingWeight, rate: pricing.rate, readyDate: pricing.readyDate, killDate: pricing.killDate }
     : undefined;
-  const price = finalPrice(order.share, steer, order.cutSheet, order.groupSize ?? 1);
+  const price = finalPrice(order.share, steer, order.cutSheet, order.groupFrac, order.depositAmount ?? DEPOSIT);
   const note = rateNote(price);
   const lines = boxSummary(order.cutSheet, order.share);
   const alreadySigned = !!order.signedAt;

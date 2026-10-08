@@ -5,7 +5,7 @@
 
 import { BACKEND_URL } from "../data/config";
 import type { Order, Steer, SeasonSettings } from "./store";
-import type { SeasonId } from "../data/config";
+import type { SeasonId, ShareId, GroupTarget } from "../data/config";
 
 export const backendConfigured = () => BACKEND_URL.length > 0;
 
@@ -15,6 +15,23 @@ export interface OrderPayload {
   cost: { total: number; deposit: number; balance: number };
   depositLink: string;     // dashboard fallback link, used only if the script can't make one
   referral?: string;
+  depositKind?: "single" | "group" | "covered";
+  groupTarget?: GroupTarget;
+}
+
+/** What a joining friend needs to know about the group they're joining. */
+export interface GroupInfo {
+  root: string;
+  organizer: string;         // first name + last initial
+  target: GroupTarget;
+  depositKind: "single" | "group";
+  depositPaid: boolean;      // the organizer's deposit is in
+  frac: number;              // confirmed steers' worth so far
+  members: { name: string; share: ShareId; paid: boolean }[];
+}
+export async function fetchGroup(code: string): Promise<GroupInfo | null> {
+  const r = await call<{ ok: boolean; group: GroupInfo | null }>(`${BACKEND_URL}?action=group&code=${encodeURIComponent(code)}`);
+  return r.group;
 }
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
@@ -28,7 +45,7 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
 
 /** `season` comes back once the backend knows about seasons — it
     decides fall vs. winter from what's actually left. */
-export async function submitOrder(payload: OrderPayload): Promise<{ ok: true; code: string; season?: SeasonId; depositUrl?: string; groupSize?: number }> {
+export async function submitOrder(payload: OrderPayload): Promise<{ ok: true; code: string; season?: SeasonId; depositUrl?: string; status?: "pending-deposit" | "reserved"; depositAmount?: number }> {
   return call(BACKEND_URL, { method: "POST", body: JSON.stringify({ action: "order", ...payload }) });
 }
 

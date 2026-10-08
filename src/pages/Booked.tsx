@@ -97,12 +97,12 @@ export default function Booked() {
         </p>
       )}
       <p style={{ marginTop: "var(--space-md)", color: "var(--ink-2)" }}>
-        Deposit received. Order <strong className="mono">{order.code}</strong>
+        {order.depositKind === "covered" ? "Your share is covered by the group's deposit." : "Deposit received."} Order <strong className="mono">{order.code}</strong>
         {backendConfigured() ? <> — a confirmation is on its way to {order.email}.</> : <> — save this code.</>}
       </p>
 
       <div style={{ textAlign: "left", marginTop: "var(--space-lg)" }}>
-        <GroupPanel code={order.code} share={order.share} size={order.groupSize ?? 1} email={order.email} />
+        <GroupPanel code={order.code} share={order.share} frac={order.groupFrac} target={order.groupTarget} members={order.groupMembers} depositKind={order.depositKind} email={order.email} />
       </div>
 
       <div className="next-steps">

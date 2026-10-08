@@ -17,24 +17,32 @@ export type ShareId = "quarter" | "half" | "whole";
 export const SHARE_RATES: Record<ShareId, number> = { whole: 6.0, half: 6.10, quarter: 6.20 };
 export const HANGING_RATE = SHARE_RATES.whole;    // the headline "from" rate
 export const TAKEHOME_RATE_EST = 8.57;            // whole-share take-home estimate, the "from" figure
-export const DEPOSIT = 300;                       // flat, all share sizes, card
+export const DEPOSIT = 300;                       // per order, card
+export const GROUP_DEPOSIT = 600;                 // one deposit from the organizer covers the whole group
 
-/* Friends needed — beyond you — to unlock a bigger share's rate. */
-export const GROUP_UNLOCK = { half: 1, whole: 3 } as const;
-const TIER_ORDER: ShareId[] = ["quarter", "half", "whole"];   // worst rate → best
+/* A group's rate follows how much of a steer its confirmed orders add
+   up to: half a steer earns the half rate, a whole steer the whole
+   rate. Two quarters, a quarter and a half, two halves — fractions,
+   not head-counts. */
+export type GroupTarget = "half" | "whole";
+export const GROUP_UNLOCK = { half: 0.5, whole: 1 } as const;   // steers' worth
+const TIER_ORDER: ShareId[] = ["quarter", "half", "whole"];     // worst rate → best
 
-export function groupTier(size: number): ShareId {
-  return size >= GROUP_UNLOCK.whole + 1 ? "whole" : size >= GROUP_UNLOCK.half + 1 ? "half" : "quarter";
+export function groupTier(frac: number): ShareId {
+  return frac >= GROUP_UNLOCK.whole - 1e-6 ? "whole" : frac >= GROUP_UNLOCK.half - 1e-6 ? "half" : "quarter";
 }
-/** The rate tier an order actually pays: its own share, or better if the group earned it. */
-export function tierFor(share: ShareId, groupSize = 1): ShareId {
-  const g = groupTier(groupSize);
+/** The rate tier an order actually pays: its own share, or better if the group earned it.
+    `groupFrac` is the group's confirmed steers' worth; alone, that's the share itself. */
+export function tierFor(share: ShareId, groupFrac?: number): ShareId {
+  const g = groupTier(groupFrac ?? SHARES[share].frac);
   return TIER_ORDER.indexOf(g) > TIER_ORDER.indexOf(share) ? g : share;
 }
-export const rateFor = (share: ShareId, groupSize = 1) => SHARE_RATES[tierFor(share, groupSize)];
+export const rateFor = (share: ShareId, groupFrac?: number) => SHARE_RATES[tierFor(share, groupFrac)];
 /** ≈ $/lb in the freezer for a share, at typical weights. */
-export const takehomeRate = (share: ShareId, groupSize = 1) =>
-  Math.round(((SHARES[share].hanging * rateFor(share, groupSize)) / SHARES[share].takehome) * 100) / 100;
+export const takehomeRate = (share: ShareId, groupFrac?: number) =>
+  Math.round(((SHARES[share].hanging * rateFor(share, groupFrac)) / SHARES[share].takehome) * 100) / 100;
+/** Quarters that make up a target: 2 for a half, 4 for a whole. */
+export const targetQuarters = (t: GroupTarget) => (t === "whole" ? 4 : 2);
 
 /* Every estimate on the site is built from a typical 1,000 lb hanging
    carcass. Live weight is back-derived (≈ 60% dresses out); take-home

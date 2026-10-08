@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  SHARES, SEASONS, CURRENT_SEASON, DEPOSIT, HANGING_RATE, SHARE_RATES, seasonOf, tierFor, money, money2, type Season,
+  SHARES, SEASONS, CURRENT_SEASON, DEPOSIT, HANGING_RATE, SHARE_RATES, seasonOf, tierFor, groupTier, targetQuarters, money, money2, type Season,
   type SeasonId,
 } from "../data/config";
 import {
@@ -28,7 +28,7 @@ type Tab = "roster" | "groups" | "steers" | "customers";
 /** What the order actually costs once its steer has been weighed —
     at that animal's rate, which may sit under the standard one. */
 function actualTotal(o: Order, steer?: Steer): number | null {
-  return finalPrice(o.share, steer, o.cutSheet, o.groupSize ?? 1)?.total ?? null;
+  return finalPrice(o.share, steer, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT)?.total ?? null;
 }
 
 const fmtDate = (iso?: string) =>
@@ -71,7 +71,7 @@ function exportInvoices(orders: Order[], steers: Steer[], season: Season) {
     ["code", "name", "email", "share", "steer", "hanging_lbs", "share_lbs", "rate_per_lb", "beef_total", "patty_lbs", "patty_charge", "total", "deposit", "balance", "priced_on", "status"],
     orders.map((o) => {
       const st = steers.find((x) => x.id === o.steer);
-      const p = finalPrice(o.share, st, o.cutSheet, o.groupSize ?? 1);
+      const p = finalPrice(o.share, st, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT);
       return p
         ? [o.code, o.name, o.email, SHARES[o.share].label, o.steer ?? "", p.hangingLbs, p.shareLbs, p.rate.toFixed(2), p.beefTotal, p.pattyLbs, p.pattyCharge, p.total, p.deposit, p.balance, "actual weight", o.status]
         : [o.code, o.name, o.email, SHARES[o.share].label, o.steer ?? "", "", SHARES[o.share].hanging, HANGING_RATE.toFixed(2), SHARES[o.share].total, "", "", SHARES[o.share].total, DEPOSIT, SHARES[o.share].total - DEPOSIT, "estimate", o.status];
@@ -366,7 +366,7 @@ export default function Customers() {
      decides when a steer's numbers are settled enough to bill on. */
   const emailInvoice = async (o: Order) => {
     const steer = steers.find((x) => x.id === o.steer);
-    const price = finalPrice(o.share, steer, o.cutSheet, o.groupSize ?? 1);
+    const price = finalPrice(o.share, steer, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT);
     if (!price) return;
     const ask = price.adjusted
       ? `Email ${o.name} their final invoice? ${money(price.balance)} due at ${money2(price.rate)}/lb `
@@ -508,7 +508,7 @@ export default function Customers() {
             <tbody>
               {orders.map((o) => {
                 const steer = steers.find((x) => x.id === o.steer);
-                const price = finalPrice(o.share, steer, o.cutSheet, o.groupSize ?? 1);
+                const price = finalPrice(o.share, steer, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT);
                 const actual = price?.total ?? null;
                 return (
                 <tr key={o.code} className={o.status === "pending-deposit" ? "row-pending" : ""}>
@@ -553,8 +553,10 @@ export default function Customers() {
                       <span className="admin-chip done">rate cut · saves {money(price.saved)}</span>
                     )}
                     {(o.groupSize ?? 1) > 1 && (
-                      <span className="admin-chip">group of {o.groupSize} · {price ? price.tier : tierFor(o.share, o.groupSize)}-steer rate</span>
+                      <span className="admin-chip">group · {steerCount(o.groupFrac ?? SHARES[o.share].frac)} steer · {price ? price.tier : tierFor(o.share, o.groupFrac)}-steer rate</span>
                     )}
+                    {o.depositKind === "group" && <span className="admin-chip done">$600 group deposit</span>}
+                    {o.depositKind === "covered" && <span className="admin-chip">deposit covered by group</span>}
                   </td>
                   <td>
                     <select
@@ -637,16 +639,21 @@ export default function Customers() {
             {groups.map(({ root, members }) => {
               const frac = members.reduce((t, o) => t + SHARES[o.share].frac, 0);
               const confirmed = members.filter((o) => o.status !== "pending-deposit");
+              const confirmedFrac = confirmed.reduce((t, o) => t + SHARES[o.share].frac, 0);
               const steerIds = [...new Set(members.map((o) => o.steer).filter(Boolean))] as string[];
               const current = steerIds.length === 1 && members.every((o) => o.steer === steerIds[0]) ? steerIds[0] : "";
-              const tier = tierFor(members[0].share, confirmed.length);
+              const rootOrder = members.find((o) => o.code === root) ?? members[0];
+              const target = rootOrder.groupTarget ?? "whole";
+              const tier = groupTier(confirmedFrac);
               return (
                 <div className="admin-group" key={root} style={{ alignItems: "flex-start" }}>
                   <div style={{ flex: 1, minWidth: 260 }}>
                     <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
                       <b className="mono">Group {root}</b>
-                      <span className="admin-chip done">{confirmed.length} confirmed · {tier}-steer rate</span>
-                      <span className={"admin-chip" + (Math.abs(frac - 1) < 1e-6 ? " done" : frac > 1 ? " hot" : "")}>{steerCount(frac)} steers' worth</span>
+                      <span className="admin-chip">filling a {target}</span>
+                      <span className="admin-chip done">{steerCount(confirmedFrac)} steer confirmed · {tier}-steer rate</span>
+                      <span className={"admin-chip" + (Math.abs(frac - SHARES[target].frac) < 1e-6 ? " done" : frac > SHARES[target].frac ? " hot" : "")}>{Math.round(frac * 4)} of {targetQuarters(target)} quarters spoken for</span>
+                      <span className="admin-chip">{rootOrder.depositKind === "group" ? "$600 group deposit" : "$300 each"}</span>
                       {steerIds.length > 1 && <span className="admin-chip hot">split across {steerIds.length} steers</span>}
                     </div>
                     <div style={{ display: "grid", gap: 4, marginTop: "var(--space-sm)" }}>

@@ -124,12 +124,12 @@ export interface Cost {
   tier: ShareId;      // the rate tier — bigger than the share when a group earned it
 }
 
-export function shareCost(share: ShareId, groupSize = 1): Cost {
+export function shareCost(share: ShareId, groupFrac?: number, deposit = DEPOSIT): Cost {
   const s = SHARES[share];
-  const tier = tierFor(share, groupSize);
-  const rate = rateFor(share, groupSize);
+  const tier = tierFor(share, groupFrac);
+  const rate = rateFor(share, groupFrac);
   const total = Math.round(s.hanging * rate);
-  return { total, deposit: DEPOSIT, balance: total - DEPOSIT, hangingLbs: s.hanging, takehomeLbs: s.takehome, rate, tier };
+  return { total, deposit, balance: total - deposit, hangingLbs: s.hanging, takehomeLbs: s.takehome, rate, tier };
 }
 
 export { HANGING_RATE, TAKEHOME_RATE_EST };
@@ -150,7 +150,7 @@ export interface FinalPrice {
   rate: number;          // $/lb actually charged
   standardRate: number;  // this tier's list rate
   tier: ShareId;         // rate tier paid — bigger than the share when a group earned it
-  groupSize: number;
+  groupFrac: number;     // confirmed steers' worth in the group
   groupUnlocked: boolean;
   adjusted: boolean;     // rate came in under standard
   heavy: boolean;        // and the carcass is why
@@ -178,14 +178,15 @@ export function finalPrice(
   share: ShareId,
   steer?: Pick<Steer, "hangingWeight" | "rate"> | null,
   cutSheet?: CutSheetAnswers | null,
-  groupSize = 1,
+  groupFrac?: number,
+  deposit = DEPOSIT,
 ): FinalPrice | null {
   const hangingLbs = steer?.hangingWeight;
   if (!hangingLbs || hangingLbs <= 0) return null;
 
   /* the tier sets the list rate; a heavy-steer discount (entered on the
      steer as a whole-share rate) comes off every tier by the same amount */
-  const tier = tierFor(share, groupSize);
+  const tier = tierFor(share, groupFrac);
   const standardRate = SHARE_RATES[tier];
   const steerDiscount = steer?.rate && steer.rate > 0 ? Math.max(0, Math.round((SHARE_RATES.whole - steer.rate) * 100) / 100) : 0;
   const rate = Math.round((standardRate - steerDiscount) * 100) / 100;
@@ -203,7 +204,7 @@ export function finalPrice(
     rate,
     standardRate,
     tier,
-    groupSize,
+    groupFrac: groupFrac ?? SHARES[share].frac,
     groupUnlocked: tier !== share,
     adjusted,
     /* only call the weight the reason when the weight actually is one */
@@ -214,8 +215,8 @@ export function finalPrice(
     pattyLbs,
     pattyCharge,
     total: billTotal,
-    deposit: DEPOSIT,
-    balance: billTotal - DEPOSIT,
+    deposit,
+    balance: billTotal - deposit,
     saved: adjusted ? Math.round(shareLbs * (standardRate - rate)) : 0,
   };
 }

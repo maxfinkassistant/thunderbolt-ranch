@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  SHARES, DEPOSIT, HANGING_RATE, PROCESSOR, SHARE_RATES, GROUP_UNLOCK, takehomeRate,
+  SHARES, DEPOSIT, GROUP_DEPOSIT, HANGING_RATE, PROCESSOR, SHARE_RATES, takehomeRate, type GroupTarget,
   SEASONS, CURRENT_SEASON, NEXT_SEASON, seasonOf,
   MAIN_CUTS, EXTRA_GROUPS, RIB_CHOICES, LOIN_CHOICES,
   RIB_YIELD, RIB_ROAST_LBS, TBONE_YIELD, STRIP_YIELD, FILET_YIELD,
@@ -13,10 +13,10 @@ import {
 } from "../data/config";
 import SteerMap from "../components/SteerMap";
 import SteerTracker from "../components/SteerTracker";
-import { defaultCutSheet, createOrder, updateOrder, type Order as OrderRow, type CutSheetAnswers } from "../lib/store";
+import { defaultCutSheet, createOrder, updateOrder, type Order as OrderRow, type CutSheetAnswers, listOrders } from "../lib/store";
 import { useAvailability, refreshAvailability, seasonFor, seasonFull, steersLeft, steerCount } from "../lib/availability";
 import { boxSummary, groundEstimate, looseGround, shareCost } from "../lib/estimate";
-import { backendConfigured, submitOrder } from "../lib/api";
+import { backendConfigured, submitOrder, fetchGroup, type GroupInfo } from "../lib/api";
 import { STRIPE_PAYMENT_LINK } from "../data/config";
 
 /** Stripe Payment Link with the order code attached for reconciliation. */
@@ -45,6 +45,34 @@ export default function Order() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [referral, setReferral] = useState(() => (params.get("ref") ?? "").toUpperCase());
+  const [joining, setJoining] = useState<GroupInfo | null | undefined>(undefined);   // undefined = not looked up
+  const [organize, setOrganize] = useState(false);
+  const [target, setTarget] = useState<GroupTarget>("whole");
+  const [groupDeposit, setGroupDeposit] = useState(true);
+
+  /* a friend's code → what group they'd be joining */
+  useEffect(() => {
+    const ref = referral.trim();
+    if (!/^TR-[A-Z0-9]{4,}$/.test(ref)) { setJoining(undefined); return; }
+    let alive = true;
+    const t = setTimeout(async () => {
+      if (!backendConfigured()) {
+        const o = listOrders().find((x) => x.code === ref && !x.sample);
+        if (!alive) return;
+        setJoining(o ? { root: o.group ?? o.code, organizer: o.name.split(" ")[0], target: o.groupTarget ?? "whole", depositKind: o.depositKind === "group" ? "group" : "single", depositPaid: o.status !== "pending-deposit", frac: SHARES[o.share].frac, members: [{ name: o.name, share: o.share, paid: o.status !== "pending-deposit" }] } : null);
+        return;
+      }
+      try { const g = await fetchGroup(ref); if (alive) setJoining(g); } catch { if (alive) setJoining(null); }
+    }, 400);
+    return () => { alive = false; clearTimeout(t); };
+  }, [referral]);
+
+  /* who pays what, up front */
+  const depositKind: "single" | "group" | "covered" =
+    joining ? (joining.depositKind === "group" ? "covered" : "single")
+    : organize && share !== "whole" && groupDeposit ? "group"
+    : "single";
+  const depositAmount = depositKind === "group" ? GROUP_DEPOSIT : depositKind === "covered" ? 0 : DEPOSIT;
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
   const availability = useAvailability();
@@ -61,25 +89,31 @@ export default function Order() {
     const live = backendConfigured();
     /* saved first so the cut sheet can't be lost; counts as reserved only
        once the deposit is seen. Demo mode has no Stripe, so it books. */
+    const groupTarget: GroupTarget | undefined = organize && share !== "whole" ? target : undefined;
     let order = createOrder(
-      { share: share!, cutSheet: a, season: seasonFor(availability, share!), referral: referral.trim() || undefined, ...who },
-      live ? "pending-deposit" : "reserved",
+      {
+        share: share!, cutSheet: a, season: seasonFor(availability, share!), referral: referral.trim() || undefined,
+        depositKind, depositAmount, groupTarget, group: joining?.root, ...who,
+      },
+      live && depositAmount > 0 ? "pending-deposit" : "reserved",
     );
     if (live) {
       try {
-        const cost = shareCost(share!);
+        const cost = shareCost(share!, undefined, depositAmount);
         const res = await submitOrder({
           order,
           summary: boxSummary(a, share!),
           cost: { total: cost.total, deposit: cost.deposit, balance: cost.balance },
-          depositLink: depositUrl(order.code, order.email),
+          depositLink: depositAmount > 0 ? depositUrl(order.code, order.email) : "",
           referral: referral.trim() || undefined,
+          depositKind, groupTarget,
         });
         if (res.season && res.season !== order.season) {
           updateOrder(order.code, { season: res.season });
           order = { ...order, season: res.season };
         }
-        const to = res.depositUrl || depositUrl(order.code, order.email);
+        if (res.status === "reserved") { updateOrder(order.code, { status: "reserved" } as never); }
+        const to = res.depositUrl || (depositAmount > 0 ? depositUrl(order.code, order.email) : "");
         if (to) { window.location.assign(to); return; }   // Stripe brings them back to /order/confirmed/CODE
       } catch (err) {
         setPlacing(false);
@@ -161,11 +195,62 @@ export default function Order() {
         <div className="group-note" style={{ marginBottom: "var(--space-lg)" }}>
           <span className="tag">Split a steer</span>
           <span>
-            Ordering with friends? Everyone in the group pays less: <b>{GROUP_UNLOCK.half} friend</b> and you all get the
-            half-steer rate, {money2(SHARE_RATES.half)}/lb; <b>{GROUP_UNLOCK.whole} friends</b> and it's the whole-steer rate,
-            {" "}{money2(SHARE_RATES.whole)}/lb. Enter a friend's code at checkout, or share yours after.
+            Ordering with friends? Everyone in the group pays less: fill <b>half a steer</b> together and you all
+            get the half-steer rate, {money2(SHARE_RATES.half)}/lb; fill a <b>whole</b> and it's the whole-steer rate,
+            {" "}{money2(SHARE_RATES.whole)}/lb. Enter a friend's code at checkout, or organize your own below.
           </span>
         </div>
+        {share && share !== "whole" && !joining && (
+          <div className="decision" style={{ marginBottom: "var(--space-lg)" }}>
+            <span className="tag" style={{ color: "var(--rust)" }}>Ordering with friends?</span>
+            <div className="opts" style={{ marginTop: "var(--space-sm)" }}>
+              <button className={"opt" + (!organize ? " on" : "")} onClick={() => setOrganize(false)}>
+                <div className="lbl">Just me</div><div className="det">{money(DEPOSIT)} deposit · {money2(SHARE_RATES[share])}/lb</div>
+              </button>
+              <button className={"opt" + (organize ? " on" : "")} onClick={() => setOrganize(true)}>
+                <div className="lbl">I'm organizing a group</div><div className="det">friends join with your code · everyone pays less</div>
+              </button>
+            </div>
+            {organize && (
+              <>
+                <div className="tag" style={{ color: "var(--mute)", margin: "var(--space-sm) 0" }}>What are you filling together?</div>
+                <div className="chips">
+                  {(share === "quarter" ? (["half", "whole"] as GroupTarget[]) : (["whole"] as GroupTarget[])).map((t) => (
+                    <button key={t} className={"chip" + (target === t ? " on" : "")} onClick={() => setTarget(t)}>
+                      {t === "half" ? "A half — 2 quarters" : "A whole — 4 quarters (or 2 halves)"}
+                    </button>
+                  ))}
+                </div>
+                <p className="chip-note">
+                  Everyone in the group pays the {target}-steer rate, {money2(SHARE_RATES[target])}/lb, once it's filled.
+                </p>
+                <div className="tag" style={{ color: "var(--mute)", margin: "var(--space-md) 0 var(--space-sm)" }}>The deposit</div>
+                <div className="opts">
+                  <button className={"opt" + (groupDeposit ? " on" : "")} onClick={() => setGroupDeposit(true)}>
+                    <div className="lbl">{money(GROUP_DEPOSIT)} from me, covers the group</div><div className="det">friends reserve with no deposit · credited to your invoice</div>
+                  </button>
+                  <button className={"opt" + (!groupDeposit ? " on" : "")} onClick={() => setGroupDeposit(false)}>
+                    <div className="lbl">{money(DEPOSIT)} each</div><div className="det">every order pays its own deposit</div>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        {share && joining && (
+          <div className="group-note" style={{ marginBottom: "var(--space-lg)" }}>
+            <span className="tag">Joining {joining.organizer}'s group</span>
+            <span>
+              Filling a <b>{joining.target}</b> — {Math.round(joining.frac * 4)} of {joining.target === "whole" ? 4 : 2} quarters so far.{" "}
+              {joining.depositKind === "group"
+                ? <>{joining.organizer}'s {money(GROUP_DEPOSIT)} group deposit covers you — <b>no deposit to pay</b>{joining.depositPaid ? "" : " (your share is held once it's in)"}.</>
+                : <>You'll pay your own {money(DEPOSIT)} deposit.</>}
+            </span>
+          </div>
+        )}
+        {share && referral.trim() && joining === null && (
+          <p className="small" style={{ color: "var(--rust)", marginBottom: "var(--space-md)" }}>We can't find an order with code {referral.trim()} — check it with your friend, or clear it to order on your own.</p>
+        )}
         <p className="small mute measure" style={{ marginBottom: "var(--space-lg)" }}>
           <sup>*</sup>Estimates based on a typical {LIVE_TYP.toLocaleString()} lb animal (about {HANGING_TYP.toLocaleString()} lb hanging) — yours may run
           somewhat above or below these figures, and you pay your share's rate on its
@@ -185,7 +270,7 @@ export default function Order() {
 
   /* ============ REVIEW ============ */
   if (q >= QUESTIONS.length) {
-    const cost = shareCost(share!);
+    const cost = shareCost(share!, undefined, depositAmount);
     const lines = boxSummary(a, share!);
     return (
       <main className="page order-main">
@@ -216,8 +301,8 @@ export default function Order() {
             <div className="pay-panel">
               <span className="tag">What you'll pay</span>
               <div className="pay-row">
-                <span>Deposit today<span className="sub">To {PAYABLE_TO}. Applies to your total.</span></span>
-                <b>{money(cost.deposit)}</b>
+                <span>Deposit today<span className="sub">{depositKind === "group" ? `One ${money(GROUP_DEPOSIT)} deposit covers your whole group; it applies to your total.` : depositKind === "covered" ? "Covered by your organizer's group deposit." : `To ${PAYABLE_TO}. Applies to your total.`}</span></span>
+                <b>{money(depositAmount)}</b>
               </div>
               <div className="pay-row">
                 <span>Balance, invoiced once weighed<span className="sub">{cost.hangingLbs} lb hanging × {money2(cost.rate)}/lb − deposit</span></span>
@@ -254,11 +339,11 @@ export default function Order() {
                 <span className="small mute">Ordering with someone? Their code puts you in their group and everyone pays less.</span>
               </div>
               <button className="btn btn-dark btn-wide" disabled={placing || !who.name || !who.email || !who.phone} onClick={place}>
-                {placing ? "Saving…" : `Pay ${money(DEPOSIT)} deposit & reserve`}
+                {placing ? "Saving…" : depositAmount > 0 ? `Pay ${money(depositAmount)} ${depositKind === "group" ? "group " : ""}deposit & reserve` : "Reserve — deposit covered by the group"}
               </button>
               {placeError && <p className="small" style={{ color: "var(--rust)" }}>{placeError}</p>}
               <p className="small mute" style={{ textAlign: "center" }}>
-                Next: secure card payment through Stripe. Your share is held the moment it clears.{" "}
+                {depositAmount > 0 ? "Next: secure card payment through Stripe. Your share is held the moment it clears." : "No payment now — the organizer's group deposit covers you."}{" "}
                 Questions? Email {RANCH_CONTACT.email}.
               </p>
             </div>

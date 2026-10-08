@@ -51,7 +51,7 @@ export default function CustomerTicket() {
   const season = seasonOf(order);
   const steer = steers.find((s) => s.id === order.steer);
   /* real money once the steer has been weighed, the estimate until then */
-  const price = finalPrice(order.share, steer, order.cutSheet, order.groupSize ?? 1);
+  const price = finalPrice(order.share, steer, order.cutSheet, order.groupFrac, order.depositAmount ?? DEPOSIT);
   const note = rateNote(price);
   const total = price?.total ?? SHARES[order.share].total;
   const readyOn = steer?.readyDate
@@ -122,10 +122,10 @@ export default function CustomerTicket() {
             </div>
           </>
         ) : (
-          <div className="ticket-row"><span className="k">Price per pound</span><span className="v">{money2(rateFor(order.share, order.groupSize ?? 1))}</span></div>
+          <div className="ticket-row"><span className="k">Price per pound</span><span className="v">{money2(rateFor(order.share, order.groupFrac))}</span></div>
         )}
         {price?.groupUnlocked && (
-          <div className="ticket-row"><span className="k">Group</span><span className="v">{price.groupSize} orders · {price.tier}-steer rate</span></div>
+          <div className="ticket-row"><span className="k">Group</span><span className="v">{order.groupSize ?? 1} orders, {Math.round(price.groupFrac * 4)}/4 of a steer · {price.tier}-steer rate</span></div>
         )}
         {price && price.pattyCharge > 0 && (
           <>
@@ -140,7 +140,7 @@ export default function CustomerTicket() {
           </>
         )}
         <div className="ticket-row"><span className="k">Total{price ? "" : " (est.)"}</span><span className="v">{money(total)}</span></div>
-        <div className="ticket-row"><span className="k">Deposit</span><span className="v">{money(DEPOSIT)} · paid to {PAYABLE_TO}</span></div>
+        <div className="ticket-row"><span className="k">Deposit</span><span className="v">{money(price?.deposit ?? order.depositAmount ?? DEPOSIT)}{order.depositKind === "group" ? " · group deposit" : order.depositKind === "covered" ? " · covered by the group's deposit" : ""} · paid to {PAYABLE_TO}</span></div>
         <div className="ticket-total">
           <span>BALANCE DUE</span>
           <span className="v">{money(total - DEPOSIT)}</span>
