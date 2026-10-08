@@ -104,6 +104,12 @@ export const sendInvoice = (adminKey: string, code: string, pdfBase64: string) =
     method: "POST", body: JSON.stringify({ key: adminKey, action: "invoice", code, pdf: pdfBase64 }),
   });
 
+/** Is the Stripe key in Script Properties usable? Never returns the key. */
+export const checkStripe = (adminKey: string) =>
+  call<{ ok: true; keyType: string; livemode: boolean; ach: "on" | "off" | "unknown" }>(BACKEND_URL, {
+    method: "POST", body: JSON.stringify({ key: adminKey, action: "stripe-check" }),
+  });
+
 /* ---------------- customer confirmation (token-gated, public) ---------------- */
 
 export interface ConfirmView {

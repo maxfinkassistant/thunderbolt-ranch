@@ -266,7 +266,7 @@ function doPost_(e) {
   let body;
   try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: "bad json" }); }
 
-  if (["status", "assign", "steer", "steer-delete", "settings", "invoice"].indexOf(body.action) >= 0) {
+  if (["status", "assign", "steer", "steer-delete", "settings", "invoice", "stripe-check"].indexOf(body.action) >= 0) {
     if (!isAdmin_(body.key)) return json_({ ok: false, error: "bad key" });
     return adminPost_(body);
   }
@@ -397,6 +397,26 @@ function adminPost_(body) {
     return json_({ ok: true });
   }
 
+  if (body.action === "stripe-check") {
+    /* Is the key usable, which mode is it, and is ACH switched on —
+       without creating anything or sending anyone an email. */
+    if (!stripeKey_()) return json_({ ok: false, error: "STRIPE_SECRET_KEY isn't set in Script Properties." });
+    const key = stripeKey_();
+    const shape = key.indexOf("sk_") === 0 ? "secret" : key.indexOf("rk_") === 0 ? "restricted" : key.indexOf("pk_") === 0 ? "PUBLISHABLE (wrong kind — needs the secret key)" : "unrecognised";
+    try {
+      const bal = stripe_("get", "/balance");
+      let ach = "unknown";
+      try {
+        const pmc = stripe_("get", "/payment_method_configurations");
+        const cfgs = pmc.data || [];
+        ach = cfgs.some(c => c.us_bank_account && c.us_bank_account.available && c.us_bank_account.display_preference && c.us_bank_account.display_preference.value === "on") ? "on" : "off";
+      } catch (e2) { /* restricted keys may not read this — leave unknown */ }
+      return json_({ ok: true, keyType: shape, livemode: !!bal.livemode, ach: ach });
+    } catch (err) {
+      return json_({ ok: false, error: "Stripe rejected the key (" + shape + "): " + (err && err.message || err) });
+    }
+  }
+
   if (body.action === "invoice") {
     const code = String(body.code || "").toUpperCase();
     const at = orderRow_(code);
@@ -415,20 +435,19 @@ function adminPost_(body) {
 
     /* a fresh Stripe link for exactly this balance; retire the old one so
        a stale amount can't be paid */
+    /* An invoice without a pay link is worse than no invoice — the
+       sign-off button would make no sense. So: no links, no email. */
+    if (!stripeKey_()) return json_({ ok: false, error: "Invoice NOT sent — STRIPE_SECRET_KEY isn't set in Script Properties (Apps Script → gear → Script Properties)." });
     let achUrl = "", achId = "", cardUrl = "", cardId = "", warning = "";
-    if (stripeKey_()) {
-      try {
-        if (row[17]) deactivatePayLink_(String(row[17]));
-        if (row[25]) deactivatePayLink_(String(row[25]));
-        const links = createPayLinks_(order, price, token);
-        if (links.ach) { achUrl = links.ach.url; achId = links.ach.id; }
-        cardUrl = links.card.url; cardId = links.card.id;
-        if (!links.achAvailable) warning = "Invoice sent with a card link only — ACH isn't enabled on the Stripe account yet (Stripe → Settings → Payment methods → ACH Direct Debit).";
-      } catch (err) {
-        warning = "Invoice sent without payment links — " + (err && err.message || err);
-      }
-    } else {
-      warning = "Invoice sent without payment links: STRIPE_SECRET_KEY isn't set in Script Properties.";
+    try {
+      if (row[17]) deactivatePayLink_(String(row[17]));
+      if (row[25]) deactivatePayLink_(String(row[25]));
+      const links = createPayLinks_(order, price, token);
+      if (links.ach) { achUrl = links.ach.url; achId = links.ach.id; }
+      cardUrl = links.card.url; cardId = links.card.id;
+      if (!links.achAvailable) warning = "Sent with a card link only — ACH isn't enabled on the Stripe account yet (Stripe → Settings → Payment methods → ACH Direct Debit).";
+    } catch (err) {
+      return json_({ ok: false, error: "Invoice NOT sent — Stripe wouldn't create the pay link: " + (err && err.message || err) });
     }
 
     sh.getRange(at, COL_INVOICED).setValue(new Date().toISOString());
@@ -773,12 +792,10 @@ function invoiceCustomer_(o, steer, price, opts) {
     : "Pickup at Colorado Custom Meat Co, 443 4th Street, Kersey CO — we'll confirm the date.";
   const feePct = Math.round(CARD_FEE_PCT * 100) + "%";
   const cardAmt = cardAmount_(price.balance);
-  const payText = (opts.achUrl || opts.cardUrl)
-    ? [
-        opts.achUrl ? "   By bank (ACH), " + money_(price.balance) + ", no fee: " + opts.achUrl : "",
-        opts.cardUrl ? "   By card, " + money_(cardAmt) + " (includes a " + feePct + " card fee): " + opts.cardUrl : "",
-      ].filter(Boolean).join("\n")
-    : "   No pay link yet — reply to this email and we'll sort payment by bank or card.";
+  const payText = [
+    opts.achUrl ? "   By bank (ACH), " + money_(price.balance) + ", no fee: " + opts.achUrl : "",
+    opts.cardUrl ? "   By card, " + money_(cardAmt) + " (includes a " + feePct + " card fee): " + opts.cardUrl : "",
+  ].filter(Boolean).join("\n");
 
   const text = [
     "Hi " + first + ",",
@@ -813,12 +830,10 @@ function invoiceCustomer_(o, steer, price, opts) {
     '<ol style="padding-left:20px">',
     '<li style="margin-bottom:14px"><b>Review your cut sheet</b> — it\'s attached. Reply to this email with any changes <i>before</i> you sign.</li>',
     '<li style="margin-bottom:14px"><b>Pay your balance of ' + money_(price.balance) + '.</b><br>' +
-      ((opts.achUrl || opts.cardUrl)
-        ? '<div style="margin:10px 0">'
-          + (opts.achUrl ? btn(opts.achUrl, 'Pay ' + money_(price.balance) + ' by bank — no fee', '#7a3b22') + '<div style="font-size:12px;color:#666;margin:6px 0 12px">Bank (ACH) takes a few business days to clear.</div>' : '')
-          + (opts.cardUrl ? btn(opts.cardUrl, 'Pay ' + money_(cardAmt) + ' by card', '#5a5047') + '<div style="font-size:12px;color:#666;margin-top:6px">Includes a ' + feePct + ' card fee (' + money_(cardAmt - price.balance) + ').</div>' : '')
-          + '</div>'
-        : 'No pay link yet — reply to this email and we\'ll sort payment by bank or card.') + '</li>',
+      '<div style="margin:10px 0">'
+        + (opts.achUrl ? btn(opts.achUrl, 'Pay ' + money_(price.balance) + ' by bank — no fee', '#7a3b22') + '<div style="font-size:12px;color:#666;margin:6px 0 12px">Bank (ACH) takes a few business days to clear.</div>' : '')
+        + (opts.cardUrl ? btn(opts.cardUrl, 'Pay ' + money_(cardAmt) + ' by card', '#5a5047') + '<div style="font-size:12px;color:#666;margin-top:6px">Includes a ' + feePct + ' card fee (' + money_(cardAmt - price.balance) + ').</div>' : '')
+        + '</div></li>',
     '<li><b>Sign off.</b> Once you\'ve paid and the sheet is right:<br><div style="margin:10px 0">' + btn(opts.confirmUrl, 'Everything looks good & I\'ve paid', '#2b2521') + '</div><span style="font-size:13px;color:#666">That sends your signed cut sheet to the butcher.</span></li>',
     '</ol>',
     '<div style="margin:22px 0;padding:16px 18px;background:#f3ecd8;border-left:4px solid #b08d45;font-family:Helvetica,Arial,sans-serif">',

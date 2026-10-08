@@ -18,7 +18,7 @@ import { downloadCutSheet, buildFilledCutSheet, bytesToBase64 } from "../lib/cut
 import { finalPrice } from "../lib/estimate";
 import {
   backendConfigured, checkAdminKey, fetchOffice, pushStatus,
-  pushSteer, removeSteer, pushAssignment, pushSettings, sendInvoice, type Office,
+  pushSteer, removeSteer, pushAssignment, pushSettings, sendInvoice, checkStripe, type Office,
 } from "../lib/api";
 import { refreshAvailability, steerCount } from "../lib/availability";
 import SteerTracker from "../components/SteerTracker";
@@ -275,6 +275,18 @@ export default function Customers() {
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
   const [invoiceBusy, setInvoiceBusy] = useState<string | null>(null);
   const [exportSeason, setExportSeason] = useState<SeasonId>(CURRENT_SEASON);
+  const [stripeNote, setStripeNote] = useState<string | null>(null);
+  const testStripe = async () => {
+    setStripeNote("Checking…");
+    try {
+      const r = await checkStripe(adminKey);
+      setStripeNote(
+        `Stripe OK — ${r.keyType} key, ${r.livemode ? "LIVE" : "test"} mode, ACH ${r.ach === "on" ? "on" : r.ach === "off" ? "OFF (Stripe → Settings → Payment methods)" : "unknown"}.`,
+      );
+    } catch (e) {
+      setStripeNote((e as Error).message);
+    }
+  };
   const [exportBusy, setExportBusy] = useState(false);
   const [invoiceSent, setInvoiceSent] = useState<Record<string, boolean>>({});
   const [remote, setRemote] = useState<Office | null>(null);
@@ -438,6 +450,7 @@ export default function Customers() {
             {!live && " · local demo mode"}
           </p>
           {loadError && <p className="small" style={{ color: "var(--rust)" }}>Order system: {loadError}</p>}
+          {stripeNote && <p className="small" style={{ color: stripeNote.startsWith("Stripe OK") ? "var(--sage)" : "var(--rust)" }}>{stripeNote}</p>}
         </div>
         <div className="admin-actions">
           <button className="btn btn-ghost" onClick={() => setTick((x) => x + 1)}>Refresh</button>
@@ -446,6 +459,7 @@ export default function Customers() {
               onChange={(e) => setExportSeason(e.target.value as SeasonId)}>
               {Object.values(SEASONS).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
             </select>
+            {live && <button className="btn btn-ghost" onClick={testStripe}>Test Stripe</button>}
             <button className="btn btn-ghost" onClick={() => exportCustomers(exportOrders, steers, SEASONS[exportSeason])}>Customers CSV</button>
             <button className="btn btn-ghost" onClick={() => exportInvoices(exportOrders, steers, SEASONS[exportSeason])}>Invoices CSV</button>
             <button className="btn btn-ghost" disabled={exportBusy || !exportOrders.length}
