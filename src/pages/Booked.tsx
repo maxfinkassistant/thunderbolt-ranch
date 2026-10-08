@@ -102,7 +102,7 @@ export default function Booked() {
       </p>
 
       <div style={{ textAlign: "left", marginTop: "var(--space-lg)" }}>
-        <GroupPanel code={order.code} share={order.share} size={order.groupSize ?? 1} />
+        <GroupPanel code={order.code} share={order.share} size={order.groupSize ?? 1} email={order.email} />
       </div>
 
       <div className="next-steps">

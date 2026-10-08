@@ -135,7 +135,7 @@ export async function fillCutSheet(order: Order, bytes: ArrayBuffer | Uint8Array
     if (f) setText(form, f, X);
   }
 
-  await addSpecialRequestsPage(doc, order);
+  await addSpecialRequestsPage(doc, order, steer);
 
   return doc.save();
 }
@@ -143,7 +143,7 @@ export async function fillCutSheet(order: Order, bytes: ArrayBuffer | Uint8Array
 /* The CCMC form has no free-text box, so anything that doesn't fit
    on it — tallow, patty poundage, the customer's own notes — gets
    its own page stapled to the back. */
-async function addSpecialRequestsPage(doc: PDFDocument, order: Order) {
+async function addSpecialRequestsPage(doc: PDFDocument, order: Order, steer?: Steer | null) {
   const a = order.cutSheet;
   const items: [string, string][] = [];
 
@@ -157,6 +157,9 @@ async function addSpecialRequestsPage(doc: PDFDocument, order: Order) {
     items.push(["Organs & bones", names.join(", ")]);
   }
   if (a.notes.trim()) items.push(["Notes from the customer", a.notes.trim()]);
+  if ((order.groupSize ?? 1) > 1) {
+    items.unshift(["Group order", `This ${SHARES[order.share].label.toLowerCase()} is one of ${order.groupSize} orders splitting steer ${steer?.id ?? order.steer ?? "(not assigned yet)"}. Each customer has their own cut sheet — this one is ${order.name}'s.`]);
+  }
 
   /* The standard fonts are WinAnsi-only and pdf-lib throws on anything
      else, so a pasted emoji or smart character can't be allowed through. */

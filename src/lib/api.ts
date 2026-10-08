@@ -117,6 +117,16 @@ export const checkStripe = (adminKey: string) =>
     method: "POST", body: JSON.stringify({ key: adminKey, action: "stripe-check" }),
   });
 
+/* ---------------- group invites ----------------
+   The ranch sends them — email, and a text when the script has Twilio —
+   so the organizer just types addresses and numbers. */
+export interface Invite { name?: string; email?: string; phone?: string }
+export interface InviteResult { email?: string; phone?: string; emailed: boolean; texted: boolean; note?: string }
+export const sendInvites = (code: string, email: string, invites: Invite[]) =>
+  call<{ ok: true; results: InviteResult[]; smsConfigured: boolean }>(BACKEND_URL, {
+    method: "POST", body: JSON.stringify({ action: "invite", code, email, invites }),
+  });
+
 /* ---------------- customer confirmation (token-gated, public) ---------------- */
 
 export interface ConfirmView {

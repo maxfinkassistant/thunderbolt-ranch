@@ -89,6 +89,31 @@ counts toward the front-page tracker, so delete the test rows first.
   Rates are applied at invoice time to orders whose deposit is in.
 - **Season:** Winter 2027, 20 steers; new orders roll to Spring 2027 when full.
 
+### Group invites by text (optional, ≈5 min)
+
+Invites always go by email. To also text them, put three Script Properties in the
+Apps Script project (gear → Script Properties):
+
+- `TWILIO_SID` — Account SID from https://console.twilio.com
+- `TWILIO_TOKEN` — Auth Token, same page
+- `TWILIO_FROM` — a Twilio number you own, in +1 form
+
+No redeploy needed for properties. Without them, the invite form still works and tells
+the organizer "texting isn't set up yet".
+
+Two things to know about texting in the US: Twilio requires **A2P 10DLC registration**
+for business traffic on regular numbers — unregistered messages get filtered — and the
+texts end with "Reply STOP to opt out" because the recipient didn't sign up themselves.
+Every invite is logged to an **Invites** sheet (who, when, which order) so any complaint
+can be traced.
+
+### Groups in the Ranch Office
+
+The **Groups** tab lists everyone who ordered with the same code. Each member has their
+own cut sheet, invoice and sign-off; what they share is the steer and the rate. Pick a
+steer in **Whole group on steer** to assign every member at once — each cut sheet then
+carries that tag and a "Group order" note so the butcher knows four sheets are one animal.
+
 ### One-time: Stripe for invoices (≈2 min)
 
 The invoice email carries a card link for the customer's exact balance, and the

@@ -1586,3 +1586,11 @@ h3.d { font-size: 1.4rem; }
   .office .steers .admin-input, .office .steers .admin-select { width: 100%; }
   .office .steers input[type="date"] { padding: 7px 6px; font-size: 0.8rem; }
 }
+
+/* invite form inside the group panel */
+.invite-form { display: grid; gap: var(--space-xs); margin-top: var(--space-xs); padding-top: var(--space-sm); border-top: 1px solid var(--line); }
+.invite-row { display: grid; grid-template-columns: 1fr 1.4fr 1.1fr; gap: 6px; }
+@media (max-width: 560px) { .invite-row { grid-template-columns: 1fr; } }
+.invite-row input { padding: 9px 11px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--paper); color: var(--ink); font-size: 0.9rem; min-width: 0; }
+.invite-row input:focus-visible { outline: 2px solid var(--rust); outline-offset: 1px; }
+.invite-sent { list-style: none; padding: 0; margin: 0; display: grid; gap: 2px; font-size: 0.875rem; }

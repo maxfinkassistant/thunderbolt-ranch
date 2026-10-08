@@ -4,9 +4,31 @@
 
 import { useState } from "react";
 import { SHARE_RATES, GROUP_UNLOCK, SITE_URL, tierFor, money2, type ShareId } from "../data/config";
+import { backendConfigured, sendInvites, type Invite, type InviteResult } from "../lib/api";
 
-export default function GroupPanel({ code, share, size }: { code: string; share: ShareId; size: number }) {
+const blankRow = (): Invite => ({ name: "", email: "", phone: "" });
+
+export default function GroupPanel({ code, share, size, email }: { code: string; share: ShareId; size: number; email?: string }) {
   const [copied, setCopied] = useState(false);
+  const [rows, setRows] = useState<Invite[]>([blankRow(), blankRow()]);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState<InviteResult[] | null>(null);
+  const [smsOn, setSmsOn] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const filled = rows.filter((r) => (r.email ?? "").trim() || (r.phone ?? "").trim());
+
+  const send = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!filled.length) return;
+    setSending(true); setErr(null);
+    try {
+      if (!backendConfigured()) { setSent(filled.map((r) => ({ ...r, emailed: !!r.email, texted: !!r.phone, note: "demo" }))); return; }
+      const r = await sendInvites(code, email ?? "", filled);
+      setSent(r.results); setSmsOn(r.smsConfigured);
+      setRows([blankRow(), blankRow()]);
+    } catch (ex) { setErr((ex as Error).message); }
+    finally { setSending(false); }
+  };
   const link = `${SITE_URL}/#/order?ref=${code}`;
   const eff = tierFor(share, size);            // the rate tier they actually pay now
   const unlocked = eff !== share;
@@ -47,11 +69,41 @@ export default function GroupPanel({ code, share, size }: { code: string; share:
         <span className="tag">Your code</span>
         <b className="mono">{code}</b>
       </div>
-      <div className="group-actions">
-        <button className="btn btn-solid" onClick={copy}>{copied ? "Link copied ✓" : "Copy invite link"}</button>
-        <a className="btn btn-ghost" href={mailto}>Email friends</a>
-      </div>
-      <p className="small mute">Friends enter your code at checkout — or use the link and it's filled in. Rates are set at invoice time on everyone whose deposit is in.</p>
+      <form className="invite-form" onSubmit={send}>
+        <span className="tag" style={{ color: "var(--mute)" }}>Invite friends — we'll email and text them your code</span>
+        {rows.map((r, i) => (
+          <div className="invite-row" key={i}>
+            <input placeholder="Name" value={r.name ?? ""} autoComplete="off"
+              onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+            <input placeholder="Email" type="email" value={r.email ?? ""} autoComplete="off"
+              onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, email: e.target.value } : x)))} />
+            <input placeholder="Phone" type="tel" value={r.phone ?? ""} autoComplete="off"
+              onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, phone: e.target.value } : x)))} />
+          </div>
+        ))}
+        <div className="group-actions">
+          <button className="btn btn-solid" type="submit" disabled={sending || !filled.length}>
+            {sending ? "Sending…" : filled.length ? `Send ${filled.length} invite${filled.length === 1 ? "" : "s"}` : "Send invites"}
+          </button>
+          {rows.length < 6 && <button className="btn btn-ghost" type="button" onClick={() => setRows([...rows, blankRow()])}>+ Another</button>}
+          <button className="btn btn-ghost" type="button" onClick={copy}>{copied ? "Link copied ✓" : "Copy link"}</button>
+          <a className="btn btn-ghost" href={mailto}>Open in my email</a>
+        </div>
+        {err && <p className="small" style={{ color: "var(--rust)" }}>{err}</p>}
+        {sent && (
+          <ul className="invite-sent">
+            {sent.map((r, i) => (
+              <li key={i}>
+                <b>{r.email || r.phone}</b>{" — "}
+                {[r.emailed && "emailed", r.texted && "texted"].filter(Boolean).join(" & ") || "not sent"}
+                {r.note && r.note !== "demo" && <span className="mute"> · {r.note}</span>}
+              </li>
+            ))}
+            {!smsOn && <li className="mute">Texts aren't switched on yet — emails went out.</li>}
+          </ul>
+        )}
+      </form>
+      <p className="small mute">Each friend gets a link with your code filled in and places their own order with their own cut sheet. Rates are set at invoice time on everyone whose deposit is in.</p>
     </div>
   );
 }

@@ -330,6 +330,37 @@ function doPost_(e) {
     return adminPost_(body);
   }
 
+  if (body.action === "invite") {
+    /* public: the organizer on their own tracking page asks us to invite
+       friends. Gated by the order's own email, capped per order, logged. */
+    const code = String(body.code || "").toUpperCase();
+    const at = orderRow_(code);
+    if (at < 0) return json_({ ok: false, error: "no order " + code });
+    const row = sheet_().getRange(at, 1, 1, HEADERS.length).getValues()[0];
+    const order = orderFromRow_(row);
+    if (String(body.email || "").trim().toLowerCase() !== String(order.email || "").trim().toLowerCase()) return json_({ ok: false, error: "that's not this order's email" });
+    if (order.status === "pending-deposit") return json_({ ok: false, error: "pay your deposit first — then invite friends" });
+    const invites = Array.isArray(body.invites) ? body.invites.slice(0, 6) : [];
+    const already = inviteCount_(code);
+    if (already + invites.length > 12) return json_({ ok: false, error: "that's enough invites for one order — email us if you need more" });
+    const sms = twilioReady_();
+    const results = invites.map(inv => {
+      const name = String(inv.name || "").trim();
+      const email = String(inv.email || "").trim();
+      const phone = normalizePhone_(String(inv.phone || ""));
+      const r = { email: email, phone: phone, emailed: false, texted: false, note: "" };
+      if (!email && !phone) { r.note = "no email or phone"; return r; }
+      if (email) { try { inviteEmail_(order, name, email); r.emailed = true; } catch (err) { r.note = "email failed: " + (err && err.message || err); } }
+      if (phone) {
+        if (!sms) r.note = (r.note ? r.note + "; " : "") + "texting isn't set up yet";
+        else { try { inviteSms_(order, name, phone); r.texted = true; } catch (err) { r.note = (r.note ? r.note + "; " : "") + "text failed: " + (err && err.message || err); } }
+      }
+      logInvite_(code, name, email, phone, r);
+      return r;
+    });
+    return json_({ ok: true, results: results, smsConfigured: sms });
+  }
+
   /* public, token-gated — the customer signed off from their email link */
   if (body.action === "sign") {
     /* public, token-gated: the customer signed and says they've paid */
@@ -1060,4 +1091,103 @@ function sendToButcher_(o, steer, price, pdf, name, when) {
     replyTo: RANCH_INBOX,
     attachments: [pdf],
   });
+}
+
+
+/* ---------------- group invites ----------------
+   Email via MailApp; text via Twilio when TWILIO_SID / TWILIO_TOKEN /
+   TWILIO_FROM are in Script Properties. Every invite is logged to an
+   "Invites" sheet so a complaint can be traced. */
+
+const INVITE_SHEET = "Invites";
+function inviteSheet_() {
+  const ss = book_();
+  let sh = ss.getSheetByName(INVITE_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(INVITE_SHEET);
+    sh.appendRow(["Sent at", "Order", "Invited name", "Email", "Phone", "Emailed", "Texted", "Note"]);
+    sh.setFrozenRows(1);
+    sh.getRange(1, 1, 1, 8).setFontWeight("bold");
+    sh.getRange("E:E").setNumberFormat("@");
+  }
+  return sh;
+}
+function inviteCount_(code) {
+  const sh = inviteSheet_();
+  const last = sh.getLastRow();
+  if (last < 2) return 0;
+  return sh.getRange(2, 2, last - 1, 1).getValues().filter(r => String(r[0]).toUpperCase() === code).length;
+}
+function logInvite_(code, name, email, phone, r) {
+  inviteSheet_().appendRow([new Date().toISOString(), code, name, email, phone, r.emailed ? "yes" : "", r.texted ? "yes" : "", r.note || ""]);
+}
+
+function normalizePhone_(raw) {
+  const digits = String(raw).replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length === 10) return "+1" + digits;
+  if (digits.length === 11 && digits.charAt(0) === "1") return "+" + digits;
+  return digits.charAt(0) === "+" ? digits : "+" + digits;
+}
+
+function twilioReady_() {
+  const p = props_();
+  return !!(p.getProperty("TWILIO_SID") && p.getProperty("TWILIO_TOKEN") && p.getProperty("TWILIO_FROM"));
+}
+
+function inviteSms_(order, name, to) {
+  const p = props_();
+  const sid = p.getProperty("TWILIO_SID"), token = p.getProperty("TWILIO_TOKEN"), from = p.getProperty("TWILIO_FROM");
+  const first = (order.name || "").split(" ")[0];
+  const body = (name ? name + " — " : "") + first + " invited you to split a steer from Thunderbolt Ranch (Colorado Angus, cut your way). "
+    + "Order with code " + order.code + " and everyone pays less: " + SITE_URL + "/#/order?ref=" + order.code
+    + " Reply STOP to opt out.";
+  const res = UrlFetchApp.fetch("https://api.twilio.com/2010-04-01/Accounts/" + sid + "/Messages.json", {
+    method: "post",
+    headers: { Authorization: "Basic " + Utilities.base64Encode(sid + ":" + token) },
+    payload: { To: to, From: from, Body: body },
+    muteHttpExceptions: true,
+  });
+  if (res.getResponseCode() >= 300) {
+    let msg = String(res.getResponseCode());
+    try { msg = JSON.parse(res.getContentText()).message || msg; } catch (e) { /* keep code */ }
+    throw new Error("Twilio: " + msg);
+  }
+}
+
+function inviteEmail_(order, name, to) {
+  const first = (order.name || "").split(" ")[0];
+  const link = SITE_URL + "/#/order?ref=" + order.code;
+  const hi = name ? "Hi " + esc_(name.split(" ")[0]) + "," : "Hi,";
+  const subject = first + " invited you to split a steer — Thunderbolt Ranch";
+  const text = [
+    name ? "Hi " + name.split(" ")[0] + "," : "Hi,",
+    "",
+    first + " is ordering beef from Thunderbolt Ranch — one Colorado Angus, pasture-raised, grain-finished, cut however you want it — and wants to split a steer with you.",
+    "",
+    "Order with " + first + "'s code and everyone in the group pays less per pound:",
+    "   1 friend  → the half-steer rate,  $" + SHARE_RATES.half.toFixed(2) + "/lb",
+    "   3 friends → the whole-steer rate, $" + SHARE_RATES.whole.toFixed(2) + "/lb",
+    "",
+    "Order here (the code is filled in for you): " + link,
+    "Code: " + order.code,
+    "",
+    "You get your own cut sheet — your beef, your way. $" + DEPOSIT + " deposit holds your share.",
+    "",
+    "— Thunderbolt Ranch · Ranch to Table · thunderboltbeef.com",
+  ].join("\n");
+  const btn = (url, label, bg) => '<a href="' + url + '" style="display:inline-block;padding:13px 22px;background:' + bg + ';color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-family:Helvetica,Arial,sans-serif">' + label + '</a>';
+  const html = '<div style="font-family:Georgia,serif;color:#2b2521;max-width:620px;margin:0 auto;line-height:1.55">'
+    + '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#7a3b22">Thunderbolt Ranch · Split a steer</div>'
+    + '<h1 style="font-weight:400;font-size:26px;margin:6px 0 14px">' + esc_(first) + ' wants to split a steer with you.</h1>'
+    + '<p>' + hi + '</p>'
+    + '<p>' + esc_(first) + ' is ordering beef from Thunderbolt Ranch — one Colorado Angus, pasture-raised and grain-finished, cut however you want it — and the more of a steer a group fills, the less everyone pays per pound.</p>'
+    + '<table style="border-collapse:collapse;font-family:Helvetica,Arial,sans-serif;font-size:14px;margin:12px 0">'
+    + '<tr><td style="padding:6px 14px 6px 0;color:#7a3b22;font-family:monospace;font-size:12px">1 FRIEND</td><td>everyone pays the half-steer rate, $' + SHARE_RATES.half.toFixed(2) + '/lb</td></tr>'
+    + '<tr><td style="padding:6px 14px 6px 0;color:#7a3b22;font-family:monospace;font-size:12px">3 FRIENDS</td><td>everyone pays the whole-steer rate, $' + SHARE_RATES.whole.toFixed(2) + '/lb</td></tr>'
+    + '</table>'
+    + '<p style="margin:18px 0">' + btn(link, "Order with " + esc_(first) + "'s code", '#7a3b22') + '</p>'
+    + '<p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#555">The code <b style="font-family:monospace">' + esc_(order.code) + '</b> is filled in for you. You get your own cut sheet — your beef, your way. A $' + DEPOSIT + ' deposit holds your share.</p>'
+    + '<p style="color:#888;font-size:13px">— Thunderbolt Ranch · Ranch to Table · <a href="' + SITE_URL + '" style="color:#7a3b22">thunderboltbeef.com</a></p></div>';
+  MailApp.sendEmail({ to: to, subject: subject, body: text, htmlBody: html, name: "Thunderbolt Ranch", replyTo: RANCH_INBOX });
 }

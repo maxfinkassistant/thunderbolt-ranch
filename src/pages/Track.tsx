@@ -210,7 +210,7 @@ export default function Track() {
 
       {!order.sample && order.status !== "pending-deposit" && (
         <div style={{ marginTop: "var(--space-xl)" }}>
-          <GroupPanel code={order.code} share={order.share} size={order.groupSize ?? 1} />
+          <GroupPanel code={order.code} share={order.share} size={order.groupSize ?? 1} email={order.email} />
         </div>
       )}
 

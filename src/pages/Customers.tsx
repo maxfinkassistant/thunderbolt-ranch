@@ -23,7 +23,7 @@ import {
 import { refreshAvailability, steerCount } from "../lib/availability";
 import SteerTracker from "../components/SteerTracker";
 
-type Tab = "roster" | "steers" | "customers";
+type Tab = "roster" | "groups" | "steers" | "customers";
 
 /** What the order actually costs once its steer has been weighed —
     at that animal's rate, which may sit under the standard one. */
@@ -300,6 +300,15 @@ export default function Customers() {
   const orders = remote?.orders ?? local;
   /* money and tracker math only count orders whose deposit is in */
   const paidOrders = orders.filter((o) => o.status !== "pending-deposit");
+  /* a group is every order sharing a root code; one member alone isn't a group */
+  const groups = useMemo(() => {
+    const by: Record<string, Order[]> = {};
+    for (const o of orders) { if (o.sample) continue; const root = o.group ?? o.code; (by[root] ??= []).push(o); }
+    return Object.entries(by).filter(([, m]) => m.length > 1).map(([root, members]) => ({ root, members }));
+  }, [orders]);
+  const assignGroup = async (members: Order[], steer: string) => {
+    for (const o of members) if ((o.steer ?? "") !== steer) await assign(o, { steer });
+  };
   const exportOrders = useMemo(
     () => orders.filter((o) => !o.sample && seasonOf(o).id === exportSeason),
     [orders, exportSeason],
@@ -478,9 +487,10 @@ export default function Customers() {
       </div>
 
       <div className="admin-tabs">
-        {(["roster", "steers", "customers"] as Tab[]).map((t) => (
+        {(["roster", "groups", "steers", "customers"] as Tab[]).map((t) => (
           <button key={t} className={"admin-tab" + (tab === t ? " on" : "")} onClick={() => setTab(t)}>
             {t === "roster" ? `Harvest roster (${orders.length})`
+              : t === "groups" ? `Groups (${groups.length})`
               : t === "steers" ? `Steers (${steers.length})`
               : `Customers (${customers.length})`}
           </button>
@@ -612,6 +622,63 @@ export default function Customers() {
             switches from the estimate to the real number. "Email invoice" sends the customer
             that final number — including the lower price per pound, if you set one on the steer.
           </p>
+        </div>
+      )}
+
+      {tab === "groups" && (
+        <div>
+          <p className="small mute" style={{ marginBottom: "var(--space-md)", maxWidth: "80ch" }}>
+            Friends who ordered with the same code. Each member has their own cut sheet, invoice and
+            sign-off; what they share is the steer and the rate. Assign the whole group to one steer
+            here and every member's cut sheet carries that tag.
+          </p>
+          {groups.length === 0 && <p className="mute">No groups yet — a group appears once a second person orders with someone's code.</p>}
+          <div style={{ display: "grid", gap: "var(--space-md)" }}>
+            {groups.map(({ root, members }) => {
+              const frac = members.reduce((t, o) => t + SHARES[o.share].frac, 0);
+              const confirmed = members.filter((o) => o.status !== "pending-deposit");
+              const steerIds = [...new Set(members.map((o) => o.steer).filter(Boolean))] as string[];
+              const current = steerIds.length === 1 && members.every((o) => o.steer === steerIds[0]) ? steerIds[0] : "";
+              const tier = tierFor(members[0].share, confirmed.length);
+              return (
+                <div className="admin-group" key={root} style={{ alignItems: "flex-start" }}>
+                  <div style={{ flex: 1, minWidth: 260 }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+                      <b className="mono">Group {root}</b>
+                      <span className="admin-chip done">{confirmed.length} confirmed · {tier}-steer rate</span>
+                      <span className={"admin-chip" + (Math.abs(frac - 1) < 1e-6 ? " done" : frac > 1 ? " hot" : "")}>{steerCount(frac)} steers' worth</span>
+                      {steerIds.length > 1 && <span className="admin-chip hot">split across {steerIds.length} steers</span>}
+                    </div>
+                    <div style={{ display: "grid", gap: 4, marginTop: "var(--space-sm)" }}>
+                      {members.map((o) => (
+                        <div key={o.code} className="small" style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+                          <span className="mono">{o.code}</span>
+                          <span>{o.name}</span>
+                          <span className="mute">{SHARES[o.share].label}</span>
+                          {o.status === "pending-deposit" && <span className="admin-chip hot">no deposit</span>}
+                          {o.steer && <span className="admin-chip">steer {o.steer}</span>}
+                          <Link className="small" to={`/customers/ticket/${o.code}`}>Ticket</Link>
+                          <button className="small" style={{ textDecoration: "underline" }}
+                            onClick={async () => { setPdfBusy(o.code); try { await downloadCutSheet(o, steers.find((x) => x.id === o.steer)); } finally { setPdfBusy(null); } }}>
+                            {pdfBusy === o.code ? "…" : "Cut sheet"}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gap: 6, minWidth: 220 }}>
+                    <label className="tag" style={{ color: "var(--mute)" }} htmlFor={`g-${root}`}>Whole group on steer</label>
+                    <select id={`g-${root}`} className="admin-select" value={current} disabled={!steersReady}
+                      onChange={(e) => assignGroup(members, e.target.value)}>
+                      <option value="">{steerIds.length > 1 ? "Mixed — pick one to unify" : "No steer yet"}</option>
+                      {steers.map((x) => <option key={x.id} value={x.id}>{x.id}{x.hangingWeight ? ` · ${x.hangingWeight} lb` : ""}</option>)}
+                    </select>
+                    <span className="small mute">Sets every member's steer at once. Cut sheets stay separate.</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
