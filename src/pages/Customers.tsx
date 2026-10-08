@@ -430,7 +430,7 @@ export default function Customers() {
     }, {}),
   ).sort((a, b) => a.name.localeCompare(b.name));
 
-  const totals = orders.reduce(
+  const totals = paidOrders.reduce(
     (t, o) => ({
       hanging: t.hanging + SHARES[o.share].hanging,
       revenue: t.revenue + SHARES[o.share].total,
