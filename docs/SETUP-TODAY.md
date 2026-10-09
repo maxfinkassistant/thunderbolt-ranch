@@ -59,7 +59,7 @@ Until it's deployed the site still works, but: the Steers tab's new **Price per 
 field won't save, the **Email invoice** button errors, and a customer's tracking page
 won't show their final total.
 
-1. **https://script.google.com**, signed in as thunderboltbeef@gmail.com → open **Thunderbolt Orders**.
+1. **https://script.google.com**, signed in as thunderboltbeef@gmail.com → open **Thunderbolt Website** (the project holding Code.gs).
 2. Select everything in `Code.gs`, paste the whole new `apps-script/Code.gs` over it, **Save**.
 3. **Deploy → Manage deployments** → pencil icon on the existing web app → **Version: New version** → **Deploy**.
    (Editing the existing deployment keeps the same `/exec` URL. A *new* deployment would change it.)
@@ -182,7 +182,7 @@ Stripe **secret** key in the script — never in the site.
 3. **Grant the script internet access** (one time): in the editor, open the function
    dropdown next to ▶ Run, choose **`authorizeStripe`**, press **Run**. Google pops
    "Authorization required" → Review permissions → pick thunderboltbeef@gmail.com →
-   Advanced → Go to Thunderbolt Orders → Allow. Without this every Stripe call fails
+   Advanced → Go to Thunderbolt Website → Allow. Without this every Stripe call fails
    with *"You do not have permission to call UrlFetchApp.fetch"* — pasting and
    redeploying never asks for this permission on its own.
 
