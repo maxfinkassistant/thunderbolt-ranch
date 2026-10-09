@@ -90,6 +90,12 @@ function butcherEmail_() { return String(props_().getProperty("BUTCHER_EMAIL") |
 const STEER_SHEET = "Steers";
 const STEER_HEADERS = ["Steer ID", "Season", "Hanging weight (lb)", "Est. ready date", "Price per lb ($)", "Kill date"];
 const STANDARD_RATE = SHARE_RATES.whole;   // the whole-share rate; a steer's "rate" is a whole-share rate
+/* Seasons sold before tiered rates and group pricing: those orders keep
+   the deal they were quoted — the steer's "Price per lb" (or $6.00) flat
+   for every share, and the deposit they were placed with. Mirrors
+   FLAT_RATE_SEASONS in src/data/config.ts. */
+const FLAT_RATE_SEASONS = ["fall-2026"];
+function flatRateSeason_(s) { return FLAT_RATE_SEASONS.indexOf(String(s || "")) >= 0; }
 
 function props_() { return PropertiesService.getScriptProperties(); }
 
@@ -255,7 +261,10 @@ function orderFromRow_(r) {
     o.group = String(r[28] || "").trim() || o.code;
     if (r[31]) o.depositPaidAt = dateText_(r[31]);
     o.depositKind = String(r[32] || "single");
-    o.depositAmount = r[33] === "" || r[33] == null ? DEPOSIT : Number(r[33]);
+    /* rows from before per-order deposits carry the deposit they were
+       placed with in the Deposit column — a fall order keeps its $250 */
+    o.depositAmount = r[33] !== "" && r[33] != null ? Number(r[33])
+      : Number(r[9]) > 0 ? Number(r[9]) : DEPOSIT;
     if (r[34]) o.groupTarget = String(r[34]);
     return o;
   } catch (e) {
@@ -704,13 +713,15 @@ function priceFor_(order, steer, groupFrac) {
   const hangingLbs = Number(steer.hangingWeight);
   /* the tier sets the list rate; a heavy-steer discount (entered on the
      steer as a whole-share rate) comes off every tier by the same amount */
-  const tier = tierFor_(order.share, groupFrac);
-  const standardRate = SHARE_RATES[tier];
-  const steerDiscount = Number(steer.rate) > 0 ? Math.max(0, Math.round((SHARE_RATES.whole - Number(steer.rate)) * 100) / 100) : 0;
-  const rate = Math.round((standardRate - steerDiscount) * 100) / 100;
+  const flat = flatRateSeason_(order.season);   // pre-tier season: steer rate flat, no groups
+  const tier = flat ? order.share : tierFor_(order.share, groupFrac);
+  const standardRate = flat ? STANDARD_RATE : SHARE_RATES[tier];
+  const steerRate = Number(steer.rate) > 0 ? Number(steer.rate) : 0;
+  const steerDiscount = flat ? 0 : steerRate ? Math.max(0, Math.round((SHARE_RATES.whole - steerRate) * 100) / 100) : 0;
+  const rate = flat ? (steerRate || STANDARD_RATE) : Math.round((standardRate - steerDiscount) * 100) / 100;
   const shareLbs = Math.round(hangingLbs * (SHARE_FRAC[order.share] || 0));
   const total = Math.round(shareLbs * rate);
-  const adjusted = steerDiscount > 0;
+  const adjusted = flat ? rate < standardRate : steerDiscount > 0;
   /* the patty fee is the butcher's, but it reaches them through us —
      the customer writes one check, to the ranch */
   const pattyLbs = pattyPounds_(order.cutSheet);
@@ -721,7 +732,7 @@ function priceFor_(order, steer, groupFrac) {
     rate: rate,
     standardRate: standardRate,
     tier: tier,
-    groupFrac: groupFrac == null ? (SHARE_FRAC[order.share] || 0) : groupFrac,
+    groupFrac: flat || groupFrac == null ? (SHARE_FRAC[order.share] || 0) : groupFrac,
     groupUnlocked: tier !== order.share,
     adjusted: adjusted,
     heavy: adjusted && hangingLbs > HANGING_TYP,
@@ -733,7 +744,7 @@ function priceFor_(order, steer, groupFrac) {
     total: billTotal,
     deposit: deposit,
     balance: billTotal - deposit,
-    saved: adjusted ? Math.round(shareLbs * steerDiscount) : 0,
+    saved: adjusted ? Math.round(shareLbs * (standardRate - rate)) : 0,
   };
 }
 

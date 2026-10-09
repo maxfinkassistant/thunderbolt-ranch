@@ -51,7 +51,7 @@ export default function CustomerTicket() {
   const season = seasonOf(order);
   const steer = steers.find((s) => s.id === order.steer);
   /* real money once the steer has been weighed, the estimate until then */
-  const price = finalPrice(order.share, steer, order.cutSheet, order.groupFrac, order.depositAmount ?? DEPOSIT);
+  const price = finalPrice(order.share, steer, order.cutSheet, order.groupFrac, order.depositAmount ?? DEPOSIT, order.season);
   const note = rateNote(price);
   const total = price?.total ?? SHARES[order.share].total;
   const readyOn = steer?.readyDate

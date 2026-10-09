@@ -52,7 +52,7 @@ export default function Confirm() {
   const steer: Steer | undefined = pricing
     ? { id: pricing.steerId ?? order.steer ?? "", season: seasonOf(order).id, hangingWeight: pricing.hangingWeight, rate: pricing.rate, readyDate: pricing.readyDate, killDate: pricing.killDate }
     : undefined;
-  const price = finalPrice(order.share, steer, order.cutSheet, order.groupFrac, order.depositAmount ?? DEPOSIT);
+  const price = finalPrice(order.share, steer, order.cutSheet, order.groupFrac, order.depositAmount ?? DEPOSIT, order.season);
   const note = rateNote(price);
   const lines = boxSummary(order.cutSheet, order.share);
   const alreadySigned = !!order.signedAt;

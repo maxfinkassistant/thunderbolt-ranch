@@ -111,6 +111,12 @@ export const SEASONS: Record<SeasonId, Season> = {
 };
 
 export const CURRENT_SEASON: SeasonId = "winter-2027";
+/* Seasons sold before tiered rates and group pricing existed. Those
+   orders keep the deal they were quoted: the steer's "Price per lb"
+   (or $6.00) applies to every share as-is, and the deposit is whatever
+   the order was placed with. Mirrors FLAT_RATE_SEASONS in Code.gs. */
+export const FLAT_RATE_SEASONS: readonly SeasonId[] = ["fall-2026"];
+export const flatRateSeason = (s?: SeasonId | null): boolean => !!s && FLAT_RATE_SEASONS.includes(s);
 export const NEXT_SEASON: SeasonId = "spring-2027";
 
 /** Steers set aside for the current season. The Ranch Office can

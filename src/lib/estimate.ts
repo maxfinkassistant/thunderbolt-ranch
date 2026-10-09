@@ -8,8 +8,8 @@ import {
   TBONE_YIELD, STRIP_YIELD, FILET_YIELD,
   steakCount, roastCount,
   DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST, HANGING_TYP, PATTY_RATE, PATTY_MIN_LBS, money,
-  SHARE_RATES, tierFor, rateFor,
-  type ShareId,
+  SHARE_RATES, tierFor, rateFor, flatRateSeason,
+  type ShareId, type SeasonId,
 } from "../data/config";
 import { effectiveExtra, type CutSheetAnswers, type Steer } from "./store";
 
@@ -180,19 +180,24 @@ export function finalPrice(
   cutSheet?: CutSheetAnswers | null,
   groupFrac?: number,
   deposit = DEPOSIT,
+  season?: SeasonId | null,
 ): FinalPrice | null {
   const hangingLbs = steer?.hangingWeight;
   if (!hangingLbs || hangingLbs <= 0) return null;
 
+  /* Seasons sold before tiers: the steer's rate (or $6.00) is the rate,
+     flat, for every share — the deal those customers were quoted. */
+  const flat = flatRateSeason(season);
   /* the tier sets the list rate; a heavy-steer discount (entered on the
      steer as a whole-share rate) comes off every tier by the same amount */
-  const tier = tierFor(share, groupFrac);
-  const standardRate = SHARE_RATES[tier];
-  const steerDiscount = steer?.rate && steer.rate > 0 ? Math.max(0, Math.round((SHARE_RATES.whole - steer.rate) * 100) / 100) : 0;
-  const rate = Math.round((standardRate - steerDiscount) * 100) / 100;
+  const tier = flat ? share : tierFor(share, groupFrac);
+  const standardRate = flat ? HANGING_RATE : SHARE_RATES[tier];
+  const steerRate = steer?.rate && steer.rate > 0 ? steer.rate : 0;
+  const steerDiscount = flat ? 0 : steerRate ? Math.max(0, Math.round((SHARE_RATES.whole - steerRate) * 100) / 100) : 0;
+  const rate = flat ? (steerRate || HANGING_RATE) : Math.round((standardRate - steerDiscount) * 100) / 100;
   const shareLbs = Math.round(hangingLbs * SHARES[share].frac);
   const total = Math.round(shareLbs * rate);
-  const adjusted = steerDiscount > 0;
+  const adjusted = flat ? rate < standardRate : steerDiscount > 0;
 
   /* The patty fee is the butcher's, but it reaches them through us —
      the customer writes one check, to the ranch. */
@@ -204,7 +209,7 @@ export function finalPrice(
     rate,
     standardRate,
     tier,
-    groupFrac: groupFrac ?? SHARES[share].frac,
+    groupFrac: flat ? SHARES[share].frac : (groupFrac ?? SHARES[share].frac),
     groupUnlocked: tier !== share,
     adjusted,
     /* only call the weight the reason when the weight actually is one */

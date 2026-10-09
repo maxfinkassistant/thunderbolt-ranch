@@ -28,7 +28,7 @@ type Tab = "roster" | "groups" | "steers" | "customers";
 /** What the order actually costs once its steer has been weighed —
     at that animal's rate, which may sit under the standard one. */
 function actualTotal(o: Order, steer?: Steer): number | null {
-  return finalPrice(o.share, steer, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT)?.total ?? null;
+  return finalPrice(o.share, steer, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT, o.season)?.total ?? null;
 }
 
 const fmtDate = (iso?: string) =>
@@ -71,7 +71,7 @@ function exportInvoices(orders: Order[], steers: Steer[], season: Season) {
     ["code", "name", "email", "share", "steer", "hanging_lbs", "share_lbs", "rate_per_lb", "beef_total", "patty_lbs", "patty_charge", "total", "deposit", "balance", "priced_on", "status"],
     orders.map((o) => {
       const st = steers.find((x) => x.id === o.steer);
-      const p = finalPrice(o.share, st, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT);
+      const p = finalPrice(o.share, st, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT, o.season);
       return p
         ? [o.code, o.name, o.email, SHARES[o.share].label, o.steer ?? "", p.hangingLbs, p.shareLbs, p.rate.toFixed(2), p.beefTotal, p.pattyLbs, p.pattyCharge, p.total, p.deposit, p.balance, "actual weight", o.status]
         : [o.code, o.name, o.email, SHARES[o.share].label, o.steer ?? "", "", SHARES[o.share].hanging, HANGING_RATE.toFixed(2), SHARES[o.share].total, "", "", SHARES[o.share].total, DEPOSIT, SHARES[o.share].total - DEPOSIT, "estimate", o.status];
@@ -366,7 +366,7 @@ export default function Customers() {
      decides when a steer's numbers are settled enough to bill on. */
   const emailInvoice = async (o: Order) => {
     const steer = steers.find((x) => x.id === o.steer);
-    const price = finalPrice(o.share, steer, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT);
+    const price = finalPrice(o.share, steer, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT, o.season);
     if (!price) return;
     const ask = price.adjusted
       ? `Email ${o.name} their final invoice? ${money(price.balance)} due at ${money2(price.rate)}/lb `
@@ -508,7 +508,7 @@ export default function Customers() {
             <tbody>
               {orders.map((o) => {
                 const steer = steers.find((x) => x.id === o.steer);
-                const price = finalPrice(o.share, steer, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT);
+                const price = finalPrice(o.share, steer, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT, o.season);
                 const actual = price?.total ?? null;
                 return (
                 <tr key={o.code} className={o.status === "pending-deposit" ? "row-pending" : ""}>

@@ -101,7 +101,7 @@ export default function Track() {
   /* the live backend hands back this order's own animal; in local demo
      mode the steers are right here in the browser */
   const weighed = pricing ?? (backendConfigured() ? undefined : listSteers().find((s) => s.id === order.steer));
-  const price = finalPrice(viewShare, weighed, order.cutSheet, order.groupFrac, order.depositAmount ?? DEPOSIT);
+  const price = finalPrice(viewShare, weighed, order.cutSheet, order.groupFrac, order.depositAmount ?? DEPOSIT, order.season);
   const note = rateNote(price);
   const whenFor = (stepId: string): string => {
     switch (stepId) {

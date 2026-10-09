@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "parity": "bun --preload=./scripts/localstorage-shim.ts scripts/parity.ts"
   },
   "dependencies": {
     "pdf-lib": "^1.17.1",
