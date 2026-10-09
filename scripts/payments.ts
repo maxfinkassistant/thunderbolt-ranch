@@ -35,13 +35,45 @@ function makeSheet(name: string, grid: Grid) {
 
 /* ---------- fake Stripe ---------- */
 const sessions: Record<string, any[]> = {};   // payment link id -> checkout sessions
+/* the ledger fixture: a deposit, its refund, a second deposit, Stripe's
+   fees, and the payout that swept them to the bank */
+const ledger = {
+  charges: [
+    { id: "ch_dep", payment_intent: "pi_dep", amount: 30000, amount_refunded: 0, currency: "usd", status: "succeeded", captured: true, refunded: false, created: 1791500000,
+      billing_details: { email: "dana@example.com", name: "Dana Dep" }, payment_method_details: { type: "card", card: { brand: "visa", last4: "4242" } },
+      balance_transaction: { fee: 900, net: 29100 } },
+    { id: "ch_dup", payment_intent: "pi_dup", amount: 25000, amount_refunded: 25000, currency: "usd", status: "succeeded", captured: true, refunded: true, created: 1791500600,
+      billing_details: { email: "bo@example.com", name: "Bo Bal" }, payment_method_details: { type: "link" }, balance_transaction: { fee: 755, net: 24245 } },
+  ],
+  sessionsAll: [{ payment_intent: "pi_dep", client_reference_id: "TR-DEP001", payment_link: "plink_dep1", customer_details: { email: "dana@example.com" } }],
+  payouts: [{ id: "po_1", amount: 29100, currency: "usd", status: "paid", arrival_date: 1791590400, created: 1791550000, type: "bank_account", method: "standard",
+    destination: { object: "bank_account", bank_name: "FIRST NATIONAL BANK OF OMAHA", last4: "1897" } }],
+  txns: [
+    { id: "txn_dep", type: "charge", reporting_category: "charge", status: "available", created: 1791500000, available_on: 1791540000, amount: 30000, fee: 900, net: 29100, currency: "usd", description: "Deposit", source: { id: "ch_dep", object: "charge" } },
+    { id: "txn_dup", type: "charge", reporting_category: "charge", status: "available", created: 1791500600, available_on: 1791540000, amount: 25000, fee: 755, net: 24245, currency: "usd", description: "Deposit", source: { id: "ch_dup", object: "charge" } },
+    { id: "txn_ref", type: "refund", reporting_category: "refund", status: "available", created: 1791520000, available_on: 1791520000, amount: -25000, fee: 0, net: -25000, currency: "usd", description: "REFUND FOR CHARGE", source: { id: "re_1", object: "refund", charge: "ch_dup", reason: "duplicate" } },
+    { id: "txn_po", type: "payout", reporting_category: "payout", status: "available", created: 1791550000, available_on: 1791550000, amount: -29100, fee: 0, net: -29100, currency: "usd", description: "STRIPE PAYOUT", source: { id: "po_1", object: "payout" } },
+    { id: "txn_new", type: "charge", reporting_category: "charge", status: "pending", created: 1791600000, available_on: 1791700000, amount: 30000, fee: 900, net: 29100, currency: "usd", description: "Not paid out yet", source: { id: "ch_none", object: "charge" } },
+  ],
+  sweptBy: { po_1: ["txn_dep", "txn_dup", "txn_ref", "txn_po"] } as Record<string, string[]>,
+};
 let stripeCalls = 0;
-const UrlFetchApp = {
+const UrlFetchApp: any = {
   fetch: (url: string) => {
     stripeCalls++;
     const u = new URL(url);
     let body: any = {};
-    if (u.pathname.endsWith("/checkout/sessions")) body = { data: sessions[u.searchParams.get("payment_link") || ""] || [], has_more: false };
+    const list = (data: any[]) => ({ data, has_more: false });
+    if (u.pathname.endsWith("/checkout/sessions")) {
+      const link = u.searchParams.get("payment_link");
+      body = link ? list(sessions[link] || []) : list(ledger.sessionsAll);
+    } else if (u.pathname.endsWith("/charges")) body = list(ledger.charges);
+    else if (u.pathname.endsWith("/payouts")) body = list(ledger.payouts);
+    else if (u.pathname.endsWith("/balance")) body = { livemode: true, available: [{ currency: "usd", amount: 0 }], pending: [{ currency: "usd", amount: 29100 }] };
+    else if (u.pathname.endsWith("/balance_transactions")) {
+      const po = u.searchParams.get("payout");
+      body = list(po ? ledger.txns.filter((t) => (ledger.sweptBy[po] || []).includes(t.id)) : ledger.txns);
+    }
     return { getResponseCode: () => 200, getContentText: () => JSON.stringify(body) };
   },
 };
@@ -183,6 +215,20 @@ ok(/Saturday, October 17 – Saturday, October 24, 2026/.test(ready[0].body), "w
 ok(cell("TR-BAL001", "Status") === "ready" && !!cell("TR-BAL001", "Ready emailed at"), "order moves to ready, dated");
 r = post({ key: "x", action: "pickup-ready", codes: ["TR-BAL001"] });
 ok(r.ok === false && r.error === "bad key", "admin key required");
+
+// G. the accountant's ledger: every movement, tied to customer, order and payout
+r = post({ key: "k", action: "stripe-ledger" });
+const L = (id: string) => r.rows.find((x: any) => x.id === id);
+ok(r.ok && r.rows.length === 5, "ledger has every transaction (" + (r.rows && r.rows.length) + ")");
+ok(L("txn_dep")?.order === "TR-DEP001" && L("txn_dep")?.customer === "Dana Dep", "payment tied to its order and customer");
+ok(L("txn_dep")?.payout === "po_1" && /OMAHA •••• 1897/.test(L("txn_dep")?.bank), "payment shows the payout and bank it went to: " + L("txn_dep")?.bank);
+ok(L("txn_dep")?.fee === 9 && L("txn_dep")?.net === 291, "fee and net in dollars");
+ok(L("txn_ref")?.refundOf === "ch_dup" && L("txn_ref")?.refundReason === "duplicate" && L("txn_ref")?.email === "bo@example.com", "refund tied to the charge it reversed and its customer");
+ok(L("txn_ref")?.amount === -250, "refund is negative");
+ok(L("txn_po")?.payout === "po_1" && /FIRST NATIONAL BANK OF OMAHA/.test(L("txn_po")?.bank) && L("txn_po")?.payoutStatus === "paid", "payout row names the bank");
+ok(L("txn_new")?.payout === "" && L("txn_new")?.status === "pending", "not-yet-paid-out money has no payout");
+r = post({ key: "x", action: "stripe-ledger" });
+ok(r.ok === false && r.error === "bad key", "ledger needs the admin key");
 
 console.log(`\n${bad} failures · ${outbox.length} emails · ${stripeCalls} Stripe calls`);
 

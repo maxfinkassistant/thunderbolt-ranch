@@ -1269,7 +1269,7 @@ h3.d { font-size: 1.4rem; }
 /* ¼ ½ ¾ sit smaller than the whole number they follow */
 .frac { font-size: 0.62em; vertical-align: 0.28em; margin-left: 0.04em; }
 .site-banner .frac { vertical-align: 0.15em; }
-.tracker-herd { display: grid; gap: clamp(4px, 1vw, 10px); margin-top: var(--space-md); }
+.tracker-herd { display: grid; gap: clamp(8px, 1.4vw, 14px) clamp(8px, 1.6vw, 18px); margin-top: var(--space-md); }
 .tracker-herd svg { width: 100%; height: auto; display: block; overflow: visible; }
 .ts-open path { fill: var(--paper-2); stroke: var(--line-strong); stroke-width: 1.5; stroke-linejoin: miter; }
 .ts-tail { fill: none; stroke: var(--line-strong); stroke-width: 1.8; stroke-linecap: square; stroke-linejoin: miter; }
@@ -1331,35 +1331,9 @@ h3.d { font-size: 1.4rem; }
 .admin-table tfoot td { background: var(--paper); border-top: 2px solid var(--line-strong); }
 .admin-sub { display: block; font-size: 0.8rem; color: var(--mute); margin-top: 2px; white-space: nowrap; font-family: var(--font-body); }
 
-/* ---------------- Colorado map (how it works) ---------------- */
+/* ---------------- where it all happens (how it works) ---------------- */
 
-.co-map-grid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); gap: var(--space-xl); align-items: center; }
-@media (max-width: 900px) { .co-map-grid { grid-template-columns: 1fr; } }
-.co-map { width: 100%; height: auto; display: block; }
-.co-state { fill: var(--card); stroke: var(--ink); stroke-width: 2; }
-.co-plains line { stroke: var(--line); stroke-width: 1.5; stroke-linecap: round; }
-.co-north path { fill: var(--ink); }
-.co-north text { fill: var(--ink); font-family: var(--font-mono); font-size: 11px; font-weight: 600; text-anchor: middle; letter-spacing: 0.1em; }
-.co-ranges path { fill: var(--paper-2); stroke: var(--ink-2); stroke-width: 2; stroke-linejoin: miter; }
-.co-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; fill: var(--ink); font-weight: 600; }
-.co-label.co-sub { fill: var(--rust); font-size: 10px; }
-.co-state-label { fill: var(--mute); font-size: 12px; letter-spacing: 0.3em; font-weight: 500; }
-.co-arrowhead { fill: var(--ink); }
-.co-route { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-dasharray: 7 6; }
-.co-road { fill: none; stroke: var(--ink); stroke-width: 9; stroke-linecap: round; }
-.co-road-center { fill: none; stroke: var(--brass); stroke-width: 1.5; stroke-dasharray: 8 7; }
-.co-num circle { fill: var(--rust); }
-.co-num text { fill: var(--on-dark); font-family: var(--font-mono); font-size: 12px; font-weight: 600; text-anchor: middle; }
-.co-shop path, .co-shop rect { fill: var(--paper-2); stroke: var(--ink); stroke-width: 2; stroke-linejoin: miter; }
-.co-shop .co-door { fill: var(--ink); }
-.co-shop .co-awning { fill: var(--rust); stroke: var(--rust); }
-.co-city { fill: var(--ink); }
-.co-city-ring { fill: var(--rust-tint); stroke: var(--line-strong); stroke-width: 1.5; }
-.co-car-body { fill: var(--rust); }
-.co-car-glass { fill: var(--paper); }
-.co-car-wheel { fill: var(--ink); stroke: var(--card); stroke-width: 1.5; }
-
-.co-legend { list-style: none; display: grid; gap: var(--space-lg); }
+.co-legend { list-style: none; display: grid; gap: var(--space-lg); grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); max-width: 960px; }
 .co-legend li { display: grid; grid-template-columns: 28px 1fr; gap: var(--space-sm); font-size: 0.95rem; color: var(--ink-2); }
 .co-legend b { color: var(--ink); }
 .co-legend-num {
@@ -1642,3 +1616,5 @@ h3.d { font-size: 1.4rem; }
 /* Steers tab: the butcher's pickup window */
 .pickup-window { display: grid; gap: 4px; }
 .pickup-window .admin-sub { margin: 0; }
+.stripe-export { margin-left: auto; display: grid; gap: 4px; justify-items: end; align-self: end; }
+@media (max-width: 640px) { .stripe-export { margin-left: 0; justify-items: start; } }

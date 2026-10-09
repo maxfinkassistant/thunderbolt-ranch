@@ -6,7 +6,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { money2 } from "../data/config";
 import type { Order } from "../lib/store";
-import { fetchStripeActivity, type StripeActivity, type StripePayment, type StripePayout } from "../lib/api";
+import { fetchStripeActivity, fetchStripeLedger, type LedgerRow, type StripeActivity, type StripePayment, type StripePayout } from "../lib/api";
+import { csvDownload } from "../lib/csv";
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
@@ -38,6 +39,36 @@ function methodLabel(m: StripePayment["method"]): string {
   return m.type || "—";
 }
 
+const LEDGER_TYPE: Record<string, string> = {
+  charge: "Payment", payment: "Payment",
+  refund: "Refund", payment_refund: "Refund", refund_failure: "Refund failed (returned)",
+  payout: "Payout to bank", payout_failure: "Payout failed (returned)", payout_cancel: "Payout canceled",
+  stripe_fee: "Stripe fee", application_fee: "Stripe fee", adjustment: "Adjustment",
+  dispute: "Dispute", dispute_reversal: "Dispute won",
+};
+
+/* The accountant's file: every row of Stripe's ledger, newest first, in
+   plain numbers (no $) so a spreadsheet can sum them. Dates are local. */
+function exportLedger(rows: LedgerRow[]) {
+  const d = (iso: string) => (iso ? new Date(iso).toLocaleDateString("en-CA") : "");
+  /* payout arrival and "available on" are calendar days Stripe sends as UTC midnight */
+  const day = (iso: string) => (iso ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "UTC" }) : "");
+  const t = (iso: string) => (iso ? new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "");
+  const n = (x: number) => x.toFixed(2);
+  csvDownload(`thunderbolt-stripe-ledger-${new Date().toLocaleDateString("en-CA")}.csv`,
+    ["Date", "Time", "Type", "Description", "Customer", "Email", "Order", "For", "Payment method",
+      "Gross", "Fee", "Net", "Currency", "Status", "Available on",
+      "Payout", "Payout arrival", "Payout status", "Bank account",
+      "Refund of charge", "Refund reason", "Stripe transaction", "Stripe source", "Payment intent"],
+    rows.map((r) => [
+      d(r.created), t(r.created), LEDGER_TYPE[r.type] ?? r.type, r.description, r.customer, r.email, r.order,
+      r.kind === "deposit" ? "Deposit" : r.kind === "balance" ? "Balance" : "", r.method ? methodLabel(r.method) : "",
+      n(r.amount), n(r.fee), n(r.net), r.currency, r.status, day(r.availableOn),
+      r.payout, day(r.payoutArrival), r.payoutStatus, r.bank,
+      r.refundOf, r.refundReason, r.id, r.sourceId, r.paymentIntent,
+    ]));
+}
+
 /* money still held by the ranch: not refunded, not failed */
 const kept = (p: StripePayment) =>
   p.status === "succeeded" || p.status === "pending" || p.status === "partially-refunded" || p.status === "uncaptured";
@@ -56,6 +87,27 @@ export default function StripePanel({ adminKey, orders, tick }: { adminKey: stri
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"payments" | "payouts">("payments");
   const [filter, setFilter] = useState<Filter>("all");
+  const [exporting, setExporting] = useState(false);
+  const [exportNote, setExportNote] = useState<string | null>(null);
+  const exportAll = async () => {
+    setExporting(true); setExportNote(null);
+    try {
+      const { rows } = await fetchStripeLedger(adminKey);
+      exportLedger(rows);
+      /* the totals the accountant can tick off against the file */
+      const sum = (types: string[], f: (r: LedgerRow) => number) => rows.filter((r) => types.includes(r.type)).reduce((s, r) => s + f(r), 0);
+      const paid = sum(["charge", "payment"], (r) => r.amount);
+      const refunded = -sum(["refund", "payment_refund"], (r) => r.amount);
+      const fees = rows.reduce((s, r) => s + r.fee, 0) + -sum(["stripe_fee"], (r) => r.amount);
+      const out = -sum(["payout"], (r) => r.amount);
+      setExportNote(`Exported ${rows.length} rows: ${money2(paid)} in payments · ${money2(refunded)} refunded · ${money2(fees)} Stripe fees · ${money2(out)} paid out to the bank.`);
+    } catch (e) {
+      const msg = (e as Error).message;
+      setExportNote(msg === "unknown action" ? "The order script needs the update with the export — paste the new Code.gs and deploy a new version." : `Export failed: ${msg}`);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -104,6 +156,13 @@ export default function StripePanel({ adminKey, orders, tick }: { adminKey: stri
         <div><span className="tag">Collected</span><b className="mono">{money2(collected)}</b></div>
         <div className="small mute" style={{ alignSelf: "end" }}>
           {data.livemode ? "Live" : "TEST"} mode · <a href={`${dash}/payments`} target="_blank" rel="noreferrer">Open Stripe ↗</a>
+        </div>
+        <div className="stripe-export">
+          <button className="btn btn-ghost" disabled={exporting} onClick={exportAll}
+            title="Every payment, refund, Stripe fee and payout to the bank, one row each — for the accountant">
+            {exporting ? "Exporting…" : "Export for accountant (CSV)"}
+          </button>
+          {exportNote && <span className="small mute">{exportNote}</span>}
         </div>
       </div>
 

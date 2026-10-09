@@ -386,7 +386,7 @@ function doPost_(e) {
   let body;
   try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: "bad json" }); }
 
-  if (["status", "assign", "steer", "steer-delete", "settings", "invoice", "stripe-check", "stripe-activity", "pickup-ready"].indexOf(body.action) >= 0) {
+  if (["status", "assign", "steer", "steer-delete", "settings", "invoice", "stripe-check", "stripe-activity", "stripe-ledger", "pickup-ready"].indexOf(body.action) >= 0) {
     if (!isAdmin_(body.key)) return json_({ ok: false, error: "bad key" });
     return adminPost_(body);
   }
@@ -642,6 +642,11 @@ function adminPost_(body) {
       catch (err) { return { code: code, ok: false, error: String(err && err.message || err) }; }
     });
     return json_({ ok: true, results: results });
+  }
+
+  if (body.action === "stripe-ledger") {
+    if (!stripeKey_()) return json_({ ok: false, error: "STRIPE_SECRET_KEY isn't set in Script Properties." });
+    return json_(Object.assign({ ok: true }, stripeLedger_()));
   }
 
   if (body.action === "stripe-activity") {
@@ -1216,6 +1221,47 @@ function stripeActivity_() {
       };
     }),
   };
+}
+
+/* For the accountant: Stripe's own ledger (balance transactions) — every
+   payment, refund, fee and payout to the bank, one row each — with the
+   customer and order behind each payment or refund, and the payout (and
+   bank account) each one was swept into. Read-only. */
+function stripeLedger_() {
+  const act = stripeActivity_();   // payments tied to orders; payouts with their bank
+  const charge = {}, payout = {};
+  act.payments.forEach(p => { charge[p.id] = p; });
+  act.payouts.forEach(p => { payout[p.id] = p; });
+  const txns = stripeList_("/balance_transactions", { "expand[]": "data.source" }, 5000);
+  /* which payout carried each transaction to the bank (automatic payouts) */
+  const sweptIn = {};
+  act.payouts.forEach(po => {
+    stripeList_("/balance_transactions", { payout: po.id }, 5000)
+      .forEach(t => { if (t.type !== "payout") sweptIn[t.id] = po.id; });
+  });
+  const iso = s => s ? new Date(s * 1000).toISOString() : "";
+  const rows = txns.map(t => {
+    const src = t.source && typeof t.source === "object" ? t.source : { id: String(t.source || "") };
+    const isRefund = src.object === "refund";
+    const pay = src.object === "charge" ? charge[src.id] : isRefund ? charge[String(src.charge || "")] : null;
+    const po = src.object === "payout" ? payout[src.id] : payout[sweptIn[t.id] || ""];
+    return {
+      id: t.id, type: t.type, category: t.reporting_category || "", status: t.status,
+      created: iso(t.created), availableOn: iso(t.available_on),
+      description: t.description || "",
+      amount: t.amount / 100, fee: t.fee / 100, net: t.net / 100,
+      currency: String(t.currency || "usd").toUpperCase(),
+      sourceId: src.id || "", paymentIntent: pay ? pay.paymentIntent : "",
+      order: pay ? pay.order : "", customer: pay ? (pay.orderName || pay.name) : "", email: pay ? pay.email : "",
+      kind: pay ? pay.kind : "",
+      method: pay ? pay.method : null,
+      refundOf: isRefund ? String(src.charge || "") : "", refundReason: isRefund ? String(src.reason || "") : "",
+      payout: src.object === "payout" ? src.id : (sweptIn[t.id] || ""),
+      payoutArrival: po ? po.arrival : "", payoutStatus: po ? po.status : "",
+      bank: po ? ((po.destination.bank ? po.destination.bank + " " : "") + "•••• " + po.destination.last4) : "",
+    };
+  });
+  return { livemode: act.livemode, rows: rows };
 }
 
 /* ---- payments land once: recorded once, the customer told once ----

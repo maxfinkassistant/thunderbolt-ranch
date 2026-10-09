@@ -88,6 +88,11 @@ counts toward the front-page tracker, so delete the test rows first.
   tied to its order, with a **Deposit check** on top — orders charged twice, orders with no
   deposit in Stripe, deposits paid but not on file, and payments with no order. Read-only;
   refunds are done in Stripe.
+- **Export for accountant (CSV)** on the Stripe tab: Stripe's whole ledger, one row per money
+  movement — every payment, refund, Stripe fee and payout to the bank (First National Bank of
+  Omaha •••• 1897) — with the customer and order behind each payment or refund and the payout
+  each one was deposited in. Plain numbers, so it sums in Excel; the line under the button
+  gives the totals (payments, refunded, fees, paid out) to tick off against it.
 - **The dashboard Payment Link** (`VITE_STRIPE_PAYMENT_LINK`) is now only a fallback if
   the script can't make a link. **Change it to $300 in Stripe** so the fallback is right.
 - **Rates:** whole $6.00 · half $6.10 · quarter $6.20 per lb hanging. A steer's

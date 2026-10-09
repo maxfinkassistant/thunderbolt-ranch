@@ -21,6 +21,7 @@ import {
   pushSteer, removeSteer, pushAssignment, pushSettings, sendInvoice, checkStripe, checkDeposit, sendPickupReady, type Office,
 } from "../lib/api";
 import { refreshAvailability, steerCount } from "../lib/availability";
+import { csvDownload } from "../lib/csv";
 import SteerTracker from "../components/SteerTracker";
 import StripePanel from "../components/StripePanel";
 
@@ -50,16 +51,6 @@ const DEMO_PASSCODE = "KERSEY";
 /* ---------------- exports, one harvest at a time ----------------
    Three files because three people want them: the roster for the
    ranch, the cut sheets for the butcher, the invoices for the books. */
-
-function csvDownload(name: string, head: string[], rows: (string | number)[][]) {
-  const csv = [head, ...rows]
-    .map((r) => r.map((c) => `"${String(c ?? "").split('"').join('""')}"`).join(","))
-    .join("\n");
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-  const a = document.createElement("a");
-  a.href = url; a.download = name; a.click();
-  URL.revokeObjectURL(url);
-}
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 

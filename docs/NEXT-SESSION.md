@@ -63,6 +63,12 @@ address/hours/phone and the PDF, sets status ready and "Ready emailed at". `bun 
 (`scripts/payments.ts`) runs Code.gs against a fake sheet + Stripe and checks every email
 goes out exactly once — run it after touching any of this.
 
+**Accountant export (2026-10-09):** script action `stripe-ledger` (`stripeLedger_()`) joins
+Stripe balance transactions to orders (via `stripeActivity_`) and to the payout that swept each
+one (`/balance_transactions?payout=`); the Stripe tab's "Export for accountant (CSV)" writes it.
+`bun run payments` covers the join. Steer tracker is now a grid (`herdColumns()`); the Colorado
+map on How it works is gone; the butcher's phone is in the footer.
+
 **Not yet done / waiting on Max:**
 1. Dry run of the full order → deposit → confirmation → invite → invoice flow with Max's
    own email, in test mode or live-then-refund. The Orders sheet already holds one 0.25

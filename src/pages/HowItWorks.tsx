@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import SteerMap from "../components/SteerMap";
-import ColoradoMap from "../components/ColoradoMap";
 import {
   SHARES, DEPOSIT, HANGING_RATE, TAKEHOME_RATE_EST,
   SEASONS, CURRENT_SEASON, NEXT_SEASON, STORAGE_NOTE,
@@ -234,25 +233,23 @@ export default function HowItWorks() {
               Colorado Custom in Kersey, about an hour up the road from the Denver area.
             </p>
           </div>
-          <div className="co-map-grid">
-            <ColoradoMap />
-            <ol className="co-legend">
-              <li>
-                <span className="co-legend-num">1</span>
-                <div>
-                  <b>Ranch to butcher.</b> Your steer goes from our pens in northeast Colorado to
-                  {" "}{PROCESSOR.name} in Kersey, where it hangs 14 days and is cut to your sheet.
-                </div>
-              </li>
-              <li>
-                <span className="co-legend-num">2</span>
-                <div>
-                  <b>You drive up.</b> When your beef is ready, head to {PROCESSOR.address}.
-                  Frozen, vacuum-sealed, labeled, and loaded.
-                </div>
-              </li>
-            </ol>
-          </div>
+          <ol className="co-legend">
+            <li>
+              <span className="co-legend-num">1</span>
+              <div>
+                <b>Ranch to butcher.</b> Your steer goes from our pens in northeast Colorado to
+                {" "}{PROCESSOR.name} in Kersey, where it hangs 14 days and is cut to your sheet.
+              </div>
+            </li>
+            <li>
+              <span className="co-legend-num">2</span>
+              <div>
+                <b>You drive up.</b> When your beef is ready, head to {PROCESSOR.address}.
+                Frozen, vacuum-sealed, labeled, and loaded. Colorado Custom's number
+                is <a href={`tel:${PROCESSOR.phone}`}>{PROCESSOR.phone}</a>.
+              </div>
+            </li>
+          </ol>
         </div>
       </section>
 

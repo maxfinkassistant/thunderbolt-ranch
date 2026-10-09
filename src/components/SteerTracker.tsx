@@ -39,6 +39,19 @@ function SteerIcon({ fill }: { fill: number }) {
   );
 }
 
+/* Rows of steers rather than one long line, so each one is big enough
+   to read. The icons are wider than tall, so aim a bit wider than a
+   square, and prefer a column count that leaves no ragged last row:
+   20 → 4 rows of 5, 12 → 3 of 4, 16 → 4 of 4. */
+function herdColumns(n: number): number {
+  if (n <= 6) return n;
+  const target = Math.sqrt(n * 1.6);
+  const even = [3, 4, 5, 6, 7, 8].filter((c) => n % c === 0);
+  return even.length
+    ? even.reduce((a, b) => (Math.abs(b - target) < Math.abs(a - target) ? b : a))
+    : Math.ceil(target);
+}
+
 export default function SteerTracker({ compact = false }: { compact?: boolean }) {
   const a = useAvailability();
   const season = SEASONS[CURRENT_SEASON];
@@ -64,7 +77,7 @@ export default function SteerTracker({ compact = false }: { compact?: boolean })
         className="tracker-herd"
         role="img"
         aria-label={a.known ? `${count} of ${capacity} steers reserved` : `${capacity} steers this season`}
-        style={{ gridTemplateColumns: `repeat(${capacity}, minmax(0, 1fr))` }}
+        style={{ gridTemplateColumns: `repeat(${herdColumns(capacity)}, minmax(0, 1fr))` }}
       >
         {Array.from({ length: capacity }, (_, i) => (
           <SteerIcon key={i} fill={a.known ? Math.max(0, Math.min(1, reserved - i)) : 0} />

@@ -189,6 +189,40 @@ export interface StripeActivity {
   payouts: StripePayout[];
 }
 
+/** One row per money movement in Stripe's ledger — payment, refund,
+    fee, payout to the bank — tied to its order and the payout it rode. */
+export interface LedgerRow {
+  id: string;                 // txn_…
+  type: string;               // Stripe's balance-transaction type: charge, refund, payout, stripe_fee…
+  category: string;           // Stripe's reporting category
+  status: "available" | "pending";
+  created: string;
+  availableOn: string;
+  description: string;
+  amount: number;             // gross; negative for refunds and payouts
+  fee: number;
+  net: number;
+  currency: string;
+  sourceId: string;           // ch_ / re_ / po_ …
+  paymentIntent: string;
+  order: string;
+  customer: string;
+  email: string;
+  kind: StripePayment["kind"] | "";
+  method: StripePayment["method"] | null;
+  refundOf: string;
+  refundReason: string;
+  payout: string;             // the payout that carried it to the bank (or the payout itself)
+  payoutArrival: string;
+  payoutStatus: string;
+  bank: string;               // "FIRST NATIONAL BANK OF OMAHA •••• 1897"
+}
+
+export const fetchStripeLedger = (adminKey: string) =>
+  call<{ ok: true; livemode: boolean; rows: LedgerRow[] }>(BACKEND_URL, {
+    method: "POST", body: JSON.stringify({ key: adminKey, action: "stripe-ledger" }),
+  });
+
 export const fetchStripeActivity = (adminKey: string) =>
   call<{ ok: true } & StripeActivity>(BACKEND_URL, {
     method: "POST", body: JSON.stringify({ key: adminKey, action: "stripe-activity" }),
