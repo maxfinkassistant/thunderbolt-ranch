@@ -97,6 +97,15 @@ const STANDARD_RATE = SHARE_RATES.whole;   // the whole-share rate; a steer's "r
 const FLAT_RATE_SEASONS = ["fall-2026"];
 function flatRateSeason_(s) { return FLAT_RATE_SEASONS.indexOf(String(s || "")) >= 0; }
 
+/* What the invoice takes off for the deposit: only a deposit the sheet
+   has on file ("Deposit paid at"). Orders from before the deposit gate
+   were reserved whether or not anyone paid, so the amount they were
+   placed with is not proof of payment. Mirrors depositCredit() in
+   src/lib/estimate.ts. */
+function depositCredit_(o) {
+  return o.depositPaidAt ? Number(o.depositAmount == null ? DEPOSIT : o.depositAmount) || 0 : 0;
+}
+
 function props_() { return PropertiesService.getScriptProperties(); }
 
 function isAdmin_(key) {
@@ -265,6 +274,7 @@ function orderFromRow_(r) {
        placed with in the Deposit column — a fall order keeps its $250 */
     o.depositAmount = r[33] !== "" && r[33] != null ? Number(r[33])
       : Number(r[9]) > 0 ? Number(r[9]) : DEPOSIT;
+    o.depositCredit = depositCredit_(o);
     if (r[34]) o.groupTarget = String(r[34]);
     return o;
   } catch (e) {
@@ -381,7 +391,7 @@ function doPost_(e) {
   let body;
   try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: "bad json" }); }
 
-  if (["status", "assign", "steer", "steer-delete", "settings", "invoice", "stripe-check"].indexOf(body.action) >= 0) {
+  if (["status", "assign", "steer", "steer-delete", "settings", "invoice", "stripe-check", "stripe-activity"].indexOf(body.action) >= 0) {
     if (!isAdmin_(body.key)) return json_({ ok: false, error: "bad key" });
     return adminPost_(body);
   }
@@ -627,6 +637,11 @@ function adminPost_(body) {
     }
   }
 
+  if (body.action === "stripe-activity") {
+    if (!stripeKey_()) return json_({ ok: false, error: "STRIPE_SECRET_KEY isn't set in Script Properties." });
+    return json_(Object.assign({ ok: true }, stripeActivity_()));
+  }
+
   if (body.action === "invoice") {
     const code = String(body.code || "").toUpperCase();
     const at = orderRow_(code);
@@ -727,7 +742,7 @@ function priceFor_(order, steer, groupFrac) {
   const pattyLbs = pattyPounds_(order.cutSheet);
   const pattyCharge = Math.round(pattyLbs * PATTY_RATE);
   const billTotal = total + pattyCharge;
-  const deposit = order.depositAmount == null ? DEPOSIT : Number(order.depositAmount);
+  const deposit = depositCredit_(order);
   return {
     rate: rate,
     standardRate: standardRate,
@@ -1053,6 +1068,104 @@ function payLinkState_(ids) {
   return pending ? "pending" : "none";
 }
 
+/* Every page of a Stripe list, up to `max` items. */
+function stripeList_(path, params, max) {
+  const out = [];
+  let after = "";
+  while (out.length < max) {
+    const q = Object.keys(params).map(k => encodeURIComponent(k) + "=" + encodeURIComponent(params[k]))
+      .concat(["limit=100"], after ? ["starting_after=" + after] : []).join("&");
+    const r = stripe_("get", path + "?" + q);
+    const d = r.data || [];
+    Array.prototype.push.apply(out, d);
+    if (!r.has_more || !d.length) break;
+    after = d[d.length - 1].id;
+  }
+  return out;
+}
+
+const DEPOSIT_AMOUNTS = [250, DEPOSIT, GROUP_DEPOSIT];   // the fall $250, today's $300, a group's $600
+
+/* What the Ranch Office's Stripe tab shows, read-only: payments (each
+   tied to an order where it can be), payouts and the balance. A payment
+   is tied by the order code the checkout carried, else by the order's
+   own pay links, else by email — the closest order in time when one
+   email placed several. */
+function stripeActivity_() {
+  const charges = stripeList_("/charges", { "expand[]": "data.balance_transaction" }, 500);
+  const sessions = stripeList_("/checkout/sessions", {}, 500);
+  const payouts = stripeList_("/payouts", { "expand[]": "data.destination" }, 200);
+  const bal = stripe_("get", "/balance");
+
+  const orders = rows_().map(r => ({
+    code: String(r[0]).toUpperCase(), name: String(r[3] || ""), email: String(r[4] || "").trim().toLowerCase(),
+    created: new Date(r[1]).getTime() || 0, depLink: String(r[29] || ""),
+    balLinks: [String(r[17] || ""), String(r[25] || "")].filter(Boolean),
+  }));
+  const byCode = {};
+  orders.forEach(o => { byCode[o.code] = o; });
+  const sessionFor = {};
+  sessions.forEach(s => { if (s.payment_intent) sessionFor[s.payment_intent] = s; });
+
+  const payments = charges.map(c => {
+    const s = sessionFor[c.payment_intent] || null;
+    const bd = c.billing_details || {};
+    const email = String((s && s.customer_details && s.customer_details.email) || bd.email || c.receipt_email || "").trim();
+    const link = s && s.payment_link ? String(s.payment_link) : "";
+    const ref = s && s.client_reference_id ? String(s.client_reference_id).toUpperCase() : "";
+    let order = null, how = "";
+    if (ref && byCode[ref]) { order = byCode[ref]; how = "code"; }
+    if (!order && link) {
+      order = orders.find(o => o.depLink === link || o.balLinks.indexOf(link) >= 0) || null;
+      if (order) how = "link";
+    }
+    if (!order && email) {
+      const t = c.created * 1000;
+      const same = orders.filter(o => o.email === email.toLowerCase())
+        .sort((a, b) => Math.abs(a.created - t) - Math.abs(b.created - t));
+      if (same.length) { order = same[0]; how = "email"; }
+    }
+    const amount = c.amount / 100;
+    const kind = order && order.balLinks.indexOf(link) >= 0 ? "balance"
+      : DEPOSIT_AMOUNTS.indexOf(amount) >= 0 ? "deposit" : order ? "balance" : "other";
+    const pm = c.payment_method_details || {};
+    const card = pm.card || {}, bank = pm.us_bank_account || {};
+    const bt = c.balance_transaction && typeof c.balance_transaction === "object" ? c.balance_transaction : null;
+    return {
+      id: c.id, paymentIntent: c.payment_intent || "", amount: amount, refunded: (c.amount_refunded || 0) / 100,
+      currency: String(c.currency || "usd").toUpperCase(),
+      status: c.disputed ? "disputed" : c.refunded ? (c.captured ? "refunded" : "reversed")
+        : c.amount_refunded > 0 ? "partially-refunded" : c.status === "failed" ? "failed"
+        : c.status === "pending" ? "pending" : !c.captured ? "uncaptured" : "succeeded",
+      failure: c.failure_message || "",
+      method: pm.type === "card" ? { type: "card", brand: card.brand || "", last4: card.last4 || "", wallet: card.wallet ? card.wallet.type : "" }
+        : pm.type === "us_bank_account" ? { type: "bank", brand: bank.bank_name || "", last4: bank.last4 || "" }
+        : { type: String(pm.type || "") },
+      email: email, name: String(bd.name || (s && s.customer_details && s.customer_details.name) || ""),
+      created: new Date(c.created * 1000).toISOString(),
+      fee: bt ? bt.fee / 100 : null, net: bt ? bt.net / 100 : null,
+      order: order ? order.code : "", orderName: order ? order.name : "", matchedBy: how, kind: kind,
+    };
+  });
+
+  const sum = list => (list || []).filter(x => x.currency === "usd").reduce((t, x) => t + x.amount, 0) / 100;
+  return {
+    livemode: !!bal.livemode,
+    balance: { available: sum(bal.available), pending: sum(bal.pending) },
+    payments: payments,
+    payouts: payouts.map(p => {
+      const d = p.destination && typeof p.destination === "object" ? p.destination : {};
+      return {
+        id: p.id, amount: p.amount / 100, currency: String(p.currency || "usd").toUpperCase(), status: p.status,
+        arrival: new Date(p.arrival_date * 1000).toISOString(), created: new Date(p.created * 1000).toISOString(),
+        type: p.type === "card" ? "Payout to debit card" : "Payout to bank account", method: p.method || "standard",
+        destination: { bank: String(d.bank_name || d.brand || ""), last4: String(d.last4 || "") },
+        failure: p.failure_message || "",
+      };
+    }),
+  };
+}
+
 /* ---- the emails ---- */
 
 function moneyLines_(o, price) {
@@ -1062,7 +1175,7 @@ function moneyLines_(o, price) {
     lines.push("Patties: " + price.pattyLbs + " lb × $" + PATTY_RATE.toFixed(2) + "/lb = " + money_(price.pattyCharge) + "  (the butcher's charge for pressing them, which we pay and add here)");
     lines.push("Total: " + money_(price.total));
   }
-  lines.push("Deposit already paid: −" + money_(price.deposit));
+  if (price.deposit > 0) lines.push("Deposit already paid: −" + money_(price.deposit));
   lines.push("BALANCE DUE: " + money_(price.balance));
   return lines;
 }
@@ -1131,7 +1244,7 @@ function invoiceCustomer_(o, steer, price, opts) {
     '<tr><td style="padding:6px 0;color:#666">Steer ' + esc_(o.steer || '—') + ' · ' + price.hangingLbs + ' lb hanging · your share ' + price.shareLbs + ' lb</td><td></td></tr>',
     '<tr><td style="padding:6px 0">Beef — ' + price.shareLbs + ' lb × $' + price.rate.toFixed(2) + '/lb</td><td style="text-align:right">' + money_(price.beefTotal) + '</td></tr>',
     price.pattyCharge > 0 ? '<tr><td style="padding:6px 0">Patties — ' + price.pattyLbs + ' lb × $' + PATTY_RATE.toFixed(2) + '/lb (the butcher\'s charge, which we pay and add here)</td><td style="text-align:right">' + money_(price.pattyCharge) + '</td></tr>' : '',
-    '<tr><td style="padding:6px 0">Deposit already paid</td><td style="text-align:right">−' + money_(price.deposit) + '</td></tr>',
+    price.deposit > 0 ? '<tr><td style="padding:6px 0">Deposit already paid</td><td style="text-align:right">−' + money_(price.deposit) + '</td></tr>' : '',
     '<tr style="font-weight:700;border-top:2px solid #2b2521"><td style="padding:10px 0">Balance due</td><td style="text-align:right;padding:10px 0">' + money_(price.balance) + '</td></tr>',
     '</table>',
     '<p style="font-size:13px;color:#555">One payment, to Thunderbolt Ranch LLC — nothing to settle with the butcher.</p>',

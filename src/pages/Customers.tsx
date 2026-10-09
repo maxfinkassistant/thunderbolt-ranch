@@ -15,20 +15,21 @@ import {
   type Order, type OrderStatus, type Steer, type SeasonSettings,
 } from "../lib/store";
 import { downloadCutSheet, buildFilledCutSheet, bytesToBase64 } from "../lib/cutsheetPdf";
-import { finalPrice } from "../lib/estimate";
+import { finalPrice, depositCredit } from "../lib/estimate";
 import {
   backendConfigured, checkAdminKey, fetchOffice, pushStatus,
   pushSteer, removeSteer, pushAssignment, pushSettings, sendInvoice, checkStripe, checkDeposit, type Office,
 } from "../lib/api";
 import { refreshAvailability, steerCount } from "../lib/availability";
 import SteerTracker from "../components/SteerTracker";
+import StripePanel from "../components/StripePanel";
 
-type Tab = "roster" | "groups" | "steers" | "customers";
+type Tab = "roster" | "groups" | "steers" | "customers" | "stripe";
 
 /** What the order actually costs once its steer has been weighed —
     at that animal's rate, which may sit under the standard one. */
 function actualTotal(o: Order, steer?: Steer): number | null {
-  return finalPrice(o.share, steer, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT, o.season)?.total ?? null;
+  return finalPrice(o.share, steer, o.cutSheet, o.groupFrac, depositCredit(o), o.season)?.total ?? null;
 }
 
 const fmtDate = (iso?: string) =>
@@ -71,10 +72,10 @@ function exportInvoices(orders: Order[], steers: Steer[], season: Season) {
     ["code", "name", "email", "share", "steer", "hanging_lbs", "share_lbs", "rate_per_lb", "beef_total", "patty_lbs", "patty_charge", "total", "deposit", "balance", "priced_on", "status"],
     orders.map((o) => {
       const st = steers.find((x) => x.id === o.steer);
-      const p = finalPrice(o.share, st, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT, o.season);
+      const p = finalPrice(o.share, st, o.cutSheet, o.groupFrac, depositCredit(o), o.season);
       return p
         ? [o.code, o.name, o.email, SHARES[o.share].label, o.steer ?? "", p.hangingLbs, p.shareLbs, p.rate.toFixed(2), p.beefTotal, p.pattyLbs, p.pattyCharge, p.total, p.deposit, p.balance, "actual weight", o.status]
-        : [o.code, o.name, o.email, SHARES[o.share].label, o.steer ?? "", "", SHARES[o.share].hanging, HANGING_RATE.toFixed(2), SHARES[o.share].total, "", "", SHARES[o.share].total, DEPOSIT, SHARES[o.share].total - DEPOSIT, "estimate", o.status];
+        : [o.code, o.name, o.email, SHARES[o.share].label, o.steer ?? "", "", SHARES[o.share].hanging, HANGING_RATE.toFixed(2), SHARES[o.share].total, "", "", SHARES[o.share].total, depositCredit(o), SHARES[o.share].total - depositCredit(o), "estimate", o.status];
     }));
 }
 
@@ -366,13 +367,16 @@ export default function Customers() {
      decides when a steer's numbers are settled enough to bill on. */
   const emailInvoice = async (o: Order) => {
     const steer = steers.find((x) => x.id === o.steer);
-    const price = finalPrice(o.share, steer, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT, o.season);
+    const price = finalPrice(o.share, steer, o.cutSheet, o.groupFrac, depositCredit(o), o.season);
     if (!price) return;
     const ask = price.adjusted
       ? `Email ${o.name} their final invoice? ${money(price.balance)} due at ${money2(price.rate)}/lb `
         + `(down from ${money2(price.standardRate)}), and they'll be told why.`
       : `Email ${o.name} their final invoice? ${money(price.balance)} due at ${money2(price.rate)}/lb.`;
-    if (!window.confirm(ask)) return;
+    const noDeposit = o.depositKind !== "covered" && !o.depositPaidAt
+      ? `\n\nNo deposit is on file for this order, so nothing comes off for one — they'll be billed the full ${money(price.total)}.`
+      : "";
+    if (!window.confirm(ask + noDeposit)) return;
     setInvoiceBusy(o.code);
     setLoadError(null);
     try {
@@ -445,7 +449,7 @@ export default function Customers() {
     (t, o) => ({
       hanging: t.hanging + SHARES[o.share].hanging,
       revenue: t.revenue + SHARES[o.share].total,
-      deposits: t.deposits + DEPOSIT,
+      deposits: t.deposits + depositCredit(o),
     }),
     { hanging: 0, revenue: 0, deposits: 0 },
   );
@@ -487,11 +491,12 @@ export default function Customers() {
       </div>
 
       <div className="admin-tabs">
-        {(["roster", "groups", "steers", "customers"] as Tab[]).map((t) => (
+        {((live ? ["roster", "groups", "steers", "customers", "stripe"] : ["roster", "groups", "steers", "customers"]) as Tab[]).map((t) => (
           <button key={t} className={"admin-tab" + (tab === t ? " on" : "")} onClick={() => setTab(t)}>
             {t === "roster" ? `Harvest roster (${orders.length})`
               : t === "groups" ? `Groups (${groups.length})`
               : t === "steers" ? `Steers (${steers.length})`
+              : t === "stripe" ? "Stripe"
               : `Customers (${customers.length})`}
           </button>
         ))}
@@ -508,11 +513,11 @@ export default function Customers() {
             <tbody>
               {orders.map((o) => {
                 const steer = steers.find((x) => x.id === o.steer);
-                const price = finalPrice(o.share, steer, o.cutSheet, o.groupFrac, o.depositAmount ?? DEPOSIT, o.season);
+                const price = finalPrice(o.share, steer, o.cutSheet, o.groupFrac, depositCredit(o), o.season);
                 const actual = price?.total ?? null;
                 return (
                 <tr key={o.code} className={o.status === "pending-deposit" ? "row-pending" : ""}>
-                  <td className="mono">{o.code}{o.sample && <span className="admin-chip">sample</span>}{o.status === "pending-deposit" && <span className="admin-chip hot">no deposit</span>}</td>
+                  <td className="mono">{o.code}{o.sample && <span className="admin-chip">sample</span>}{o.status === "pending-deposit" && <span className="admin-chip hot">no deposit</span>}{o.status !== "pending-deposit" && !o.sample && live && o.depositKind !== "covered" && !o.depositPaidAt && <span className="admin-chip hot" title="Nothing in the sheet's Deposit paid at — the invoice bills the full amount">no deposit on file</span>}</td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{o.name}</div>
                     <div className="small mute">{o.email}{o.phone && ` · ${o.phone}`}</div>
@@ -749,6 +754,8 @@ export default function Customers() {
           </p>
         </div>
       )}
+
+      {tab === "stripe" && live && <StripePanel adminKey={adminKey} orders={orders} tick={tick} />}
 
       {tab === "customers" && (
         <div style={{ display: "grid", gap: "var(--space-sm)" }}>

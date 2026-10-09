@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { SHARES, DEPOSIT, PROCESSOR, RANCH_CONTACT, PAYABLE_TO, PATTY_RATE, seasonOf, money, money2 } from "../data/config";
-import { boxSummary, finalPrice, rateNote } from "../lib/estimate";
+import { boxSummary, finalPrice, depositCredit, rateNote } from "../lib/estimate";
 import { buildSignedCutSheet, bytesToBase64 } from "../lib/cutsheetPdf";
 import { backendConfigured, fetchConfirm, submitConfirm, type ConfirmView } from "../lib/api";
 import type { Steer } from "../lib/store";
@@ -52,7 +52,7 @@ export default function Confirm() {
   const steer: Steer | undefined = pricing
     ? { id: pricing.steerId ?? order.steer ?? "", season: seasonOf(order).id, hangingWeight: pricing.hangingWeight, rate: pricing.rate, readyDate: pricing.readyDate, killDate: pricing.killDate }
     : undefined;
-  const price = finalPrice(order.share, steer, order.cutSheet, order.groupFrac, order.depositAmount ?? DEPOSIT, order.season);
+  const price = finalPrice(order.share, steer, order.cutSheet, order.groupFrac, depositCredit(order), order.season);
   const note = rateNote(price);
   const lines = boxSummary(order.cutSheet, order.share);
   const alreadySigned = !!order.signedAt;
@@ -173,7 +173,7 @@ export default function Confirm() {
               {price.pattyCharge > 0 && (
                 <div className="pay-row"><span>Patties<span className="sub">{price.pattyLbs} lb × {money2(PATTY_RATE)}/lb</span></span><b>{money(price.pattyCharge)}</b></div>
               )}
-              <div className="pay-row"><span>Deposit paid</span><b>− {money(price.deposit)}</b></div>
+              {price.deposit > 0 && <div className="pay-row"><span>Deposit paid</span><b>− {money(price.deposit)}</b></div>}
               <div className="pay-row total"><span>Balance</span><b>{money(price.balance)}</b></div>
               {note && <p className="pay-fine">{note}</p>}
             </div>

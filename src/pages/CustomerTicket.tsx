@@ -4,11 +4,11 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  SHARES, DEPOSIT, PAYABLE_TO, RANCH_CONTACT, PATTY_RATE, PATTY_BILLING_NOTE, rateFor,
+  SHARES, PAYABLE_TO, RANCH_CONTACT, PATTY_RATE, PATTY_BILLING_NOTE, rateFor,
   seasonOf, money, money2,
 } from "../data/config";
 import { getOrder, listSteers, type Order, type Steer } from "../lib/store";
-import { boxSummary, finalPrice, rateNote } from "../lib/estimate";
+import { boxSummary, finalPrice, depositCredit, rateNote } from "../lib/estimate";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
 import { backendConfigured, fetchOrder, fetchOffice } from "../lib/api";
 
@@ -51,9 +51,10 @@ export default function CustomerTicket() {
   const season = seasonOf(order);
   const steer = steers.find((s) => s.id === order.steer);
   /* real money once the steer has been weighed, the estimate until then */
-  const price = finalPrice(order.share, steer, order.cutSheet, order.groupFrac, order.depositAmount ?? DEPOSIT, order.season);
+  const price = finalPrice(order.share, steer, order.cutSheet, order.groupFrac, depositCredit(order), order.season);
   const note = rateNote(price);
   const total = price?.total ?? SHARES[order.share].total;
+  const credit = depositCredit(order);
   const readyOn = steer?.readyDate
     ? new Date(steer.readyDate + "T12:00:00").toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })
     : null;
@@ -140,10 +141,13 @@ export default function CustomerTicket() {
           </>
         )}
         <div className="ticket-row"><span className="k">Total{price ? "" : " (est.)"}</span><span className="v">{money(total)}</span></div>
-        <div className="ticket-row"><span className="k">Deposit</span><span className="v">{money(price?.deposit ?? order.depositAmount ?? DEPOSIT)}{order.depositKind === "group" ? " · group deposit" : order.depositKind === "covered" ? " · covered by the group's deposit" : ""} · paid to {PAYABLE_TO}</span></div>
+        <div className="ticket-row"><span className="k">Deposit</span><span className="v">{
+          order.depositKind === "covered" ? "covered by the group's deposit"
+            : credit > 0 ? `${money(credit)}${order.depositKind === "group" ? " · group deposit" : ""} · paid to ${PAYABLE_TO}`
+              : "none on file"}</span></div>
         <div className="ticket-total">
           <span>BALANCE DUE</span>
-          <span className="v">{money(total - DEPOSIT)}</span>
+          <span className="v">{money(total - credit)}</span>
         </div>
       </div>
 

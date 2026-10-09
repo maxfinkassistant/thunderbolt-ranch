@@ -5,7 +5,7 @@ import {
   seasonOf, money, money2, type ShareId,
 } from "../data/config";
 import { getOrder, listOrders, listSteers, STATUS_STEPS, statusIndex, type Order } from "../lib/store";
-import { boxSummary, finalPrice, rateNote } from "../lib/estimate";
+import { boxSummary, finalPrice, depositCredit, rateNote } from "../lib/estimate";
 import { downloadCutSheet } from "../lib/cutsheetPdf";
 import { backendConfigured, fetchTracking, type PublicPricing } from "../lib/api";
 import GroupPanel from "../components/GroupPanel";
@@ -101,7 +101,7 @@ export default function Track() {
   /* the live backend hands back this order's own animal; in local demo
      mode the steers are right here in the browser */
   const weighed = pricing ?? (backendConfigured() ? undefined : listSteers().find((s) => s.id === order.steer));
-  const price = finalPrice(viewShare, weighed, order.cutSheet, order.groupFrac, order.depositAmount ?? DEPOSIT, order.season);
+  const price = finalPrice(viewShare, weighed, order.cutSheet, order.groupFrac, depositCredit(order), order.season);
   const note = rateNote(price);
   const whenFor = (stepId: string): string => {
     switch (stepId) {
@@ -251,10 +251,12 @@ export default function Track() {
                 </div>
               </>
             )}
-            <div className="owed-row">
-              <span>Deposit already paid</span>
-              <b>− {money(price.deposit)}</b>
-            </div>
+            {price.deposit > 0 && (
+              <div className="owed-row">
+                <span>Deposit already paid</span>
+                <b>− {money(price.deposit)}</b>
+              </div>
+            )}
             <div className="owed-row total">
               <span>Balance due</span>
               <b>{money(price.balance)}</b>

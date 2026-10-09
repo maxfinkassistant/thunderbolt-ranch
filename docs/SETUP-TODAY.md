@@ -78,7 +78,16 @@ counts toward the front-page tracker, so delete the test rows first.
   the confirmation email — once Stripe shows it paid. Stripe sends the customer back to
   `/#/order/confirmed/CODE`, which asks the script to verify. The Ranch Office shows unpaid
   rows greyed with a **Check deposit** button; you can also set the status to Reserved by
-  hand if someone pays another way.
+  hand if someone pays another way — then type the date into that row's **Deposit paid at**
+  column on the Orders sheet, or the invoice won't take the deposit off.
+- **An invoice only credits a deposit that's on file** (the sheet's *Deposit paid at*).
+  Orders from before the deposit gate were reserved whether or not anyone paid; their
+  Stripe deposits were backfilled into that column on 2026-10-09. A row with nothing there
+  is billed the full amount, and the Harvest roster marks it **no deposit on file**.
+- **Stripe tab** in the Ranch Office: the payments and payouts Stripe shows, each payment
+  tied to its order, with a **Deposit check** on top — orders charged twice, orders with no
+  deposit in Stripe, deposits paid but not on file, and payments with no order. Read-only;
+  refunds are done in Stripe.
 - **The dashboard Payment Link** (`VITE_STRIPE_PAYMENT_LINK`) is now only a fallback if
   the script can't make a link. **Change it to $300 in Stripe** so the fallback is right.
 - **Rates:** whole $6.00 · half $6.10 · quarter $6.20 per lb hanging. A steer's

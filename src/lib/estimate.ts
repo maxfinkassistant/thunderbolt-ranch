@@ -11,7 +11,7 @@ import {
   SHARE_RATES, tierFor, rateFor, flatRateSeason,
   type ShareId, type SeasonId,
 } from "../data/config";
-import { effectiveExtra, type CutSheetAnswers, type Steer } from "./store";
+import { effectiveExtra, type CutSheetAnswers, type Order, type Steer } from "./store";
 
 const inches = (id?: string) =>
   THICKNESS_OPTIONS.find((t) => t.id === id)?.inches ?? 1;
@@ -170,6 +170,14 @@ function pattyPounds(a?: CutSheetAnswers | null): number {
   if (!a?.patties) return 0;
   const lbs = parseInt(a.pattyLbs ?? "", 10);
   return Number.isFinite(lbs) && lbs > 0 ? lbs : PATTY_MIN_LBS;
+}
+
+/** What a bill takes off for the deposit: only a deposit on file.
+    Orders from before the deposit gate were reserved whether or not
+    anyone paid, so the amount they were placed with proves nothing.
+    Mirrors depositCredit_() in apps-script/Code.gs. */
+export function depositCredit(o: Pick<Order, "depositPaidAt" | "depositAmount">): number {
+  return o.depositPaidAt ? (o.depositAmount ?? DEPOSIT) : 0;
 }
 
 /** Null until the steer has been weighed — there's no real number

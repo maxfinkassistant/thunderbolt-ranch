@@ -1599,3 +1599,41 @@ h3.d { font-size: 1.4rem; }
 .group-members li { display: flex; gap: 10px; align-items: baseline; }
 .group-tick { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; background: var(--paper-2); color: var(--mute); flex: none; }
 .group-members li.paid .group-tick { background: var(--sage); color: oklch(97% 0.01 140); }
+
+/* ---- Ranch Office: Stripe tab ---- */
+.stripe-panel { display: grid; gap: var(--space-lg); grid-template-columns: minmax(0, 1fr); }
+.stripe-summary {
+  display: flex;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.stripe-summary > div { display: grid; gap: 2px; }
+.stripe-summary .tag { color: var(--mute); }
+.stripe-summary b { font-size: 1.5rem; }
+.stripe-check {
+  background: var(--card);
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-md) var(--space-lg);
+}
+.stripe-issue {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-sm) 0;
+  border-top: 1px solid var(--line);
+}
+.stripe-issue .admin-chip { margin-left: 8px; }
+.stripe-views { display: flex; gap: var(--space-xs); border-bottom: 2px solid var(--ink); margin-bottom: var(--space-md); }
+.stripe-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: var(--space-md); }
+.stripe-filters button {
+  padding: 6px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--card);
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+.stripe-filters button.on { border: 2px solid var(--ink); font-weight: 600; }
+.office .admin-table.stripe td { white-space: nowrap; }
+.office .admin-table.stripe td .admin-sub { white-space: nowrap; }

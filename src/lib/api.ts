@@ -134,6 +134,56 @@ export const checkStripe = (adminKey: string) =>
     method: "POST", body: JSON.stringify({ key: adminKey, action: "stripe-check" }),
   });
 
+/* ---------------- what Stripe shows (Ranch Office, read-only) ---------------- */
+
+export type StripePaymentStatus =
+  | "succeeded" | "pending" | "failed" | "refunded" | "partially-refunded" | "reversed" | "disputed" | "uncaptured";
+
+export interface StripePayment {
+  id: string;                 // ch_…
+  paymentIntent: string;      // pi_… — what the Stripe dashboard links to
+  amount: number;
+  refunded: number;
+  currency: string;
+  status: StripePaymentStatus;
+  failure: string;
+  method: { type: string; brand?: string; last4?: string; wallet?: string };
+  email: string;
+  name: string;
+  created: string;            // ISO
+  fee: number | null;
+  net: number | null;
+  order: string;              // the order it was tied to, "" when none
+  orderName: string;
+  matchedBy: "code" | "link" | "email" | "";
+  kind: "deposit" | "balance" | "other";
+}
+
+export interface StripePayout {
+  id: string;
+  amount: number;
+  currency: string;
+  status: "paid" | "pending" | "in_transit" | "canceled" | "failed";
+  arrival: string;
+  created: string;
+  type: string;
+  method: string;
+  destination: { bank: string; last4: string };
+  failure: string;
+}
+
+export interface StripeActivity {
+  livemode: boolean;
+  balance: { available: number; pending: number };
+  payments: StripePayment[];
+  payouts: StripePayout[];
+}
+
+export const fetchStripeActivity = (adminKey: string) =>
+  call<{ ok: true } & StripeActivity>(BACKEND_URL, {
+    method: "POST", body: JSON.stringify({ key: adminKey, action: "stripe-activity" }),
+  });
+
 /* ---------------- group invites ----------------
    The ranch sends them — email, and a text when the script has Twilio —
    so the organizer just types addresses and numbers. */
