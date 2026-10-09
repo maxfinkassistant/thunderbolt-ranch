@@ -45,9 +45,10 @@ math reads $600 today · $950 balance · $1,550 total. Not submitted — a real 
 no paid check, and invoices credited the deposit regardless. Now `priceFor_()` /
 `finalPrice()` only credit a deposit with a *Deposit paid at* date (`depositCredit_()` /
 `depositCredit()`; `bun run parity` covers paid and unpaid). The 15 fall orders with a
-matching Stripe charge were backfilled. Open: Drew Babb, Pam Babb and Mike Gravina were each
-charged twice for one order (refund or attach to a second share); TR-DCBNQM (Josh, already
-invoiced crediting $250) and TR-93H9CP (Conor Blakeman, Josh's email) have no Stripe deposit.
+matching Stripe charge were backfilled. Drew Babb, Pam Babb and Mike Gravina had each been
+charged twice for one order; the extra charges were refunded 2026-10-09. Still open: TR-DCBNQM
+(Josh, already invoiced crediting $250) and TR-93H9CP (Conor Blakeman, Josh's email) have no
+Stripe deposit.
 The Ranch Office **Stripe** tab (`src/components/StripePanel.tsx`, script action
 `stripe-activity`) shows all of this live.
 
