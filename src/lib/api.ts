@@ -134,6 +134,16 @@ export const checkStripe = (adminKey: string) =>
     method: "POST", body: JSON.stringify({ key: adminKey, action: "stripe-check" }),
   });
 
+/** "Your beef is ready": the pickup window, the butcher's address and
+    hours, the paid invoice attached; the order moves to Ready. Each code
+    answers for itself. `paidOutside` = Josh says the balance was paid
+    some other way — the script still asks Stripe first. */
+export interface PickupResult { code: string; ok: boolean; error?: string; unpaid?: boolean }
+export const sendPickupReady = (adminKey: string, codes: string[], paidOutside = false) =>
+  call<{ ok: true; results: PickupResult[] }>(BACKEND_URL, {
+    method: "POST", body: JSON.stringify({ key: adminKey, action: "pickup-ready", codes, paidOutside }),
+  });
+
 /* ---------------- what Stripe shows (Ranch Office, read-only) ---------------- */
 
 export type StripePaymentStatus =

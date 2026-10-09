@@ -104,6 +104,44 @@ counts toward the front-page tracker, so delete the test rows first.
   initial) and whose deposit is in, on the confirmation and tracking pages.
 - **Season:** Winter 2027, 20 steers; new orders roll to Spring 2027 when full.
 
+### Payment receipts and "ready for pickup" (as of 2026-10-09)
+
+**One-time setup (≈3 min), after pasting the new `Code.gs`:**
+1. Apps Script → ⚙ Project Settings → tick **Show "appsscript.json" manifest file**. Open
+   `appsscript.json` in the editor and replace it with `apps-script/appsscript.json` from the
+   repo (it adds one permission: running on a timer).
+2. Deploy → Manage deployments → pencil → **New version** → Deploy.
+3. In the editor's function dropdown pick **installPaymentSync** → **Run** → approve the
+   permission prompt (pick thunderboltbeef@gmail.com). It runs one check right away.
+
+**What customers get now:**
+- **Deposit receipt.** The moment a deposit is found in Stripe, the "your beef is reserved"
+  email goes out as *"Deposit received — …"* with the amount, card and time and "No need to
+  pay again". (Customers who couldn't tell whether the deposit went through is what caused
+  the double charges.)
+- **Balance receipt.** When the invoice is paid: *"Payment received — order … is paid in
+  full"*, with the paid invoice PDF attached. If they haven't signed off on the cut sheet
+  yet, it has a button to do it. A bank (ACH) payment gets its receipt when it clears, not
+  when it's started.
+- Stripe is checked when the customer comes back from paying, when you press Check deposit,
+  and **every 10 minutes** in the background — whichever comes first sends the email, once.
+  The ranch inbox gets a "💵 Balance paid" note for each balance payment (and is told to
+  forward the signed sheet to the butcher if they signed while a bank payment was clearing).
+
+**Ready for pickup:**
+1. When Colorado Custom gives you the pickup window, open **Steers**, enter **Pickup window**
+   (earliest and latest day) on that steer, and **Save**.
+2. Either press **Ready for pickup → N paid** under the dates (emails everyone on that steer
+   whose balance is paid), or press **Ready for pickup** on one order in the Harvest roster.
+3. The email thanks them for paying in full and gives the window (with weekdays), Colorado
+   Custom's address, map link, phone (970-356-2333) and hours (Mon–Fri 8–4:30, closed 11–noon;
+   Sat 9–noon; Sun closed), what to tell the butcher (name, steer tag, order code), the $10/day
+   storage note after the last day, and the **final invoice marked paid in full** as a PDF.
+   The order moves to *Ready for pickup*.
+- The button stays greyed out until the steer has both pickup dates. If Stripe shows no
+  balance payment you're asked first — send it only if they paid another way (check, cash);
+  that marks their balance "paid outside Stripe" on the sheet.
+
 ### Group invites by text (optional, ≈5 min)
 
 Invites always go by email. To also text them, put three Script Properties in the

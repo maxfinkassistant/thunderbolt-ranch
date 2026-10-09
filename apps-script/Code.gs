@@ -70,6 +70,7 @@ const HEADERS = [
   "Card link id", "Card link URL",
   "Referral", "Group", "Deposit link id", "Deposit link URL", "Deposit paid at",
   "Deposit kind", "Deposit amount", "Group target",
+  "Ready emailed at", "Paid with",
 ];
 const COL_STATUS = 3, COL_STEER = 15, COL_SEASON = 16;
 /* final-invoice workflow columns (1-based) */
@@ -78,17 +79,24 @@ const COL_INVOICED = 17, COL_PLINK_ID = 18, COL_PLINK_URL = 19, COL_TOKEN = 20,
       COL_PAY_STATE = 25,   // "paid" | "pending" (ACH clearing) | ""
       COL_CARD_ID = 26, COL_CARD_URL = 27,   // the card link (+fee); 18/19 are the ACH link
       COL_REFERRAL = 28, COL_GROUP = 29, COL_DEP_ID = 30, COL_DEP_URL = 31, COL_DEP_PAID = 32,
-      COL_DEP_KIND = 33, COL_DEP_AMT = 34, COL_TARGET = 35;
+      COL_DEP_KIND = 33, COL_DEP_AMT = 34, COL_TARGET = 35,
+      COL_READY_AT = 36,    // when the ready-for-pickup email went out
+      COL_PAID_WITH = 37;   // "Visa •••• 4242 · $1,301", for the paid invoice
 
 const SITE_URL = "https://thunderboltbeef.com";
 const RANCH_INBOX = "thunderboltbeef@gmail.com";
 const BUTCHER_PHONE = "970-356-2333";
+const BUTCHER_NAME = "Colorado Custom Meat Co";
+const BUTCHER_ADDRESS = "443 4th Street, Kersey, CO 80644";
+const BUTCHER_MAP = "https://maps.google.com/?q=" + encodeURIComponent("Colorado Custom Meat Co, 443 4th Street, Kersey, CO 80644");
+/* from coloradocustommeatco.com/contact, checked 2026-10-09 */
+const BUTCHER_HOURS = ["Monday–Friday 8:00 am–4:30 pm (closed 11–noon for lunch)", "Saturday 9:00 am–noon", "Sunday closed"];
 /* Script property BUTCHER_EMAIL overrides this — point it at yourself
    for a dry run before the first real sheet goes to Colorado Custom. */
 function butcherEmail_() { return String(props_().getProperty("BUTCHER_EMAIL") || "order@ccmeatco.com").trim(); }
 
 const STEER_SHEET = "Steers";
-const STEER_HEADERS = ["Steer ID", "Season", "Hanging weight (lb)", "Est. ready date", "Price per lb ($)", "Kill date"];
+const STEER_HEADERS = ["Steer ID", "Season", "Hanging weight (lb)", "Est. ready date", "Price per lb ($)", "Kill date", "Pickup from", "Pickup until"];
 const STANDARD_RATE = SHARE_RATES.whole;   // the whole-share rate; a steer's "rate" is a whole-share rate
 /* Seasons sold before tiered rates and group pricing: those orders keep
    the deal they were quoted — the steer's "Price per lb" (or $6.00) flat
@@ -148,7 +156,7 @@ function steerSheet_() {
     /* IDs and dates stay exactly as typed — no "007" → 7, no timezone drift */
     sh.getRange("A:A").setNumberFormat("@");
     sh.getRange("D:D").setNumberFormat("@");
-    sh.getRange("F:F").setNumberFormat("@");
+    sh.getRange("F:H").setNumberFormat("@");
   } else if (sh.getLastColumn() < STEER_HEADERS.length) {
     /* a Steers sheet from before per-steer pricing: add the heading */
     sh.getRange(1, 1, 1, STEER_HEADERS.length).setValues([STEER_HEADERS]).setFontWeight("bold");
@@ -183,6 +191,8 @@ function steers_() {
       if (r[3]) steer.readyDate = dateText_(r[3]);
       if (Number(r[4]) > 0) steer.rate = Number(r[4]);
       if (r[5]) steer.killDate = dateText_(r[5]);
+      if (r[6]) steer.pickupFrom = dateText_(r[6]);
+      if (r[7]) steer.pickupUntil = dateText_(r[7]);
       return steer;
     });
 }
@@ -276,6 +286,7 @@ function orderFromRow_(r) {
       : Number(r[9]) > 0 ? Number(r[9]) : DEPOSIT;
     o.depositCredit = depositCredit_(o);
     if (r[34]) o.groupTarget = String(r[34]);
+    if (r[35]) o.readyEmailedAt = dateText_(r[35]);
     return o;
   } catch (e) {
     return null;
@@ -321,39 +332,23 @@ function doGet_(e) {
     /* Has the deposit landed? Stripe is asked; if yes the order flips to
        reserved and the confirmation goes out. Safe to call repeatedly. */
     const code = String(q.code).toUpperCase();
-    const at = orderRow_(code);
-    if (at < 0) return json_({ ok: false, error: "no order " + code });
-    const sh = sheet_();
-    const row = sh.getRange(at, 1, 1, HEADERS.length).getValues()[0];
-    const order = orderFromRow_(row);
-    if (order.status !== "pending-deposit") {
-      withGroup_(order);
-      return json_({ ok: true, paid: true, order: order });
-    }
-    let paid = false;
-    if (row[29] && stripeKey_()) {
-      try { paid = payLinkState_([String(row[29])]) === "paid"; } catch (err) { paid = false; }
-    }
-    if (!paid) return json_({ ok: true, paid: false, order: order, depositUrl: String(row[30] || "") });
-    sh.getRange(at, COL_STATUS).setValue("reserved");
-    sh.getRange(at, COL_DEP_PAID).setValue(new Date().toISOString());
-    order.status = "reserved";
-    const summary = String(row[11] || "");
-    const cost = { total: row[8], deposit: row[9], balance: row[10] };
-    try { notifyRanch_(order, summary, cost); } catch (err) { /* don't fail the customer for a ranch email */ }
-    try { confirmCustomer_(withGroup_(order), summary, cost, null, true); } catch (err) { /* ditto */ }
-    /* an organizer's group deposit also covers friends who joined before it landed */
-    if (order.depositKind === "group") releaseCovered_(order.code);
-    withGroup_(order);
-    return json_({ ok: true, paid: true, order: order });
+    const r = landDeposit_(code);
+    if (!r) return json_({ ok: false, error: "no order " + code });
+    const order = withGroup_(orderFromRow_(r.row));
+    if (r.paid) return json_({ ok: true, paid: true, order: order });
+    return json_({ ok: true, paid: false, order: order, depositUrl: String(r.row[30] || "") });
   }
   if (q.action === "confirm" && q.code) {
     /* the page behind the "looks good & I've paid" button — only with
        the token that was in that customer's own email */
     const code = String(q.code).toUpperCase();
-    const row = rows_().find(r => String(r[0]).toUpperCase() === code);
+    let row = rows_().find(r => String(r[0]).toUpperCase() === code);
     if (!row) return json_({ ok: false, error: "no order " + code });
     if (!tokenOk_(row, q.t)) return json_({ ok: false, error: "that link isn't valid — open it from your invoice email" });
+    /* back from Stripe: record the balance (and send the receipt) right away */
+    if (!row[22] && (row[17] || row[25])) {
+      try { const b = landBalance_(code); if (b) row = b.row; } catch (err) { /* the timer will catch it */ }
+    }
     const order = withGroup_(orderFromRow_(row));
     const out = { ok: true, order: order, butcherPhone: BUTCHER_PHONE, paid: !!row[22] };
     const pricing = publicPricing_(steerFor_(order));
@@ -391,7 +386,7 @@ function doPost_(e) {
   let body;
   try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: "bad json" }); }
 
-  if (["status", "assign", "steer", "steer-delete", "settings", "invoice", "stripe-check", "stripe-activity"].indexOf(body.action) >= 0) {
+  if (["status", "assign", "steer", "steer-delete", "settings", "invoice", "stripe-check", "stripe-activity", "pickup-ready"].indexOf(body.action) >= 0) {
     if (!isAdmin_(body.key)) return json_({ ok: false, error: "bad key" });
     return adminPost_(body);
   }
@@ -450,11 +445,9 @@ function doPost_(e) {
     /* Stripe is the judge of "paid", not the checkbox. A bank debit that
        hasn't cleared yet is "pending" — real, but not money in hand. */
     let state = row[22] ? "paid" : "none";
-    if (state !== "paid" && (row[17] || row[25])) {
-      try { state = payLinkState_([String(row[17] || ""), String(row[25] || "")]); } catch (err) { state = "none"; }
-      if (state === "paid") sh.getRange(at, COL_PAID_AT).setValue(now.toISOString());
+    if (state !== "paid") {
+      try { const b = landBalance_(code, { quietRanch: true }); if (b) state = b.state; } catch (err) { state = "none"; }
     }
-    sh.getRange(at, COL_PAY_STATE).setValue(state === "none" ? "" : state);
     const paid = state === "paid";
 
     const pdf = pdfBlob_(body.pdf, code, "signed");
@@ -600,7 +593,10 @@ function adminPost_(body) {
       st.readyDate || "",
       Number(st.rate) > 0 ? Number(st.rate) : "",
       st.killDate || "",
+      st.pickupFrom || "",
+      st.pickupUntil || "",
     ];
+    if (st.pickupFrom && st.pickupUntil && String(st.pickupFrom) > String(st.pickupUntil)) return json_({ ok: false, error: "pickup window ends before it starts" });
     const at = steerRow_(was);
     if (at < 0) sh.appendRow(values);
     else sh.getRange(at, 1, 1, STEER_HEADERS.length).setValues([values]);
@@ -635,6 +631,17 @@ function adminPost_(body) {
     } catch (err) {
       return json_({ ok: false, error: "Stripe rejected the key (" + shape + "): " + (err && err.message || err) });
     }
+  }
+
+  if (body.action === "pickup-ready") {
+    /* one order or every order on a steer; each answers for itself */
+    const codes = (Array.isArray(body.codes) ? body.codes : [body.code])
+      .map(c => String(c || "").trim().toUpperCase()).filter(Boolean);
+    const results = codes.map(code => {
+      try { return Object.assign({ code: code }, pickupReady_(code, !!body.paidOutside)); }
+      catch (err) { return { code: code, ok: false, error: String(err && err.message || err) }; }
+    });
+    return json_({ ok: true, results: results });
   }
 
   if (body.action === "stripe-activity") {
@@ -855,10 +862,18 @@ function pendingCustomer_(o, summary, depositUrl) {
   MailApp.sendEmail({ to: o.email, subject: "Finish your Thunderbolt Ranch reservation — " + o.code, body: text, htmlBody: html, name: "Thunderbolt Ranch", replyTo: RANCH_INBOX });
 }
 
-function confirmCustomer_(o, summary, cost, depositLink, paid) {
+/* `receipt` (from receiptOf_) when a deposit payment is what got them
+   here: the email doubles as the payment confirmation, so it says so in
+   the subject and names the amount, card and time. */
+function confirmCustomer_(o, summary, cost, depositLink, paid, receipt) {
   const first = (o.name || "").split(" ")[0];
   const share = shareLabel_(o.share).toLowerCase();
-  const subject = "Your Thunderbolt Ranch beef is reserved — " + o.code;
+  const subject = receipt
+    ? "Deposit received — your Thunderbolt Ranch beef is reserved (" + o.code + ")"
+    : "Your Thunderbolt Ranch beef is reserved — " + o.code;
+  const receiptLine = receipt
+    ? "Payment confirmation: " + money_(receipt.amount) + (receipt.method ? " · " + receipt.method : "") + " · " + whenText_(receipt.when) + "."
+    : "";
   const season = seasonCopy_(o.season);
   const rolled = o.season !== CURRENT_SEASON;
   const harvestLine = rolled
@@ -880,7 +895,8 @@ function confirmCustomer_(o, summary, cost, depositLink, paid) {
     "",
     paid
       ? (o.depositKind === "covered" ? "Your share is covered by your organizer's group deposit — reserved, nothing to pay now."
-        : "Deposit received — " + money_(o.depositAmount == null ? DEPOSIT : o.depositAmount) + (o.depositKind === "group" ? " (your group deposit, which covers your friends too)" : "") + ". Your " + share + " is reserved.")
+        : "Deposit received — " + money_(o.depositAmount == null ? DEPOSIT : o.depositAmount) + (o.depositKind === "group" ? " (your group deposit, which covers your friends too)" : "") + ". Your " + share + " is reserved."
+          + (receiptLine ? "\n" + receiptLine + " No need to pay again." + (receipt.url ? "\nStripe receipt: " + receipt.url : "") : ""))
       : depositLink
         ? "PAY YOUR " + money_(DEPOSIT) + " DEPOSIT: " + depositLink
         : "We'll reach out shortly to collect your " + money_(DEPOSIT) + " deposit.",
@@ -911,6 +927,7 @@ function confirmCustomer_(o, summary, cost, depositLink, paid) {
     '<div style="margin:0 0 22px;padding:18px;background:#2b2521;color:#f3eee6;border-radius:4px">',
     paid
       ? '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c8a85a">' + (o.depositKind === "covered" ? 'Covered by your group' : 'Deposit received') + '</div><p style="margin:8px 0;font-size:18px">' + (o.depositKind === "covered" ? 'Your organizer\'s group deposit covers you' : money_(o.depositAmount == null ? DEPOSIT : o.depositAmount) + (o.depositKind === "group" ? ' group deposit' : '')) + ' — your ' + esc_(share) + ' is reserved. &#10003;</p>'
+        + (receiptLine ? '<p style="margin:0 0 8px;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#cfc6b8">' + esc_(receiptLine) + ' No need to pay again.' + (receipt.url ? ' <a href="' + receipt.url + '" style="color:#c8a85a">Stripe receipt</a>' : '') + '</p>' : '')
       : depositLink
         ? '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c8a85a">One step to hold your share</div><div style="margin:10px 0 8px">' + btn(depositLink, 'Pay your ' + money_(DEPOSIT) + ' deposit', '#b08d45') + '</div>'
         : '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c8a85a">Deposit</div><p style="margin:8px 0">We\'ll reach out shortly to collect your ' + money_(DEPOSIT) + ' deposit.</p>',
@@ -1056,17 +1073,52 @@ function deactivatePayLink_(id) {
    bank debit was submitted and is still clearing — ACH takes about
    four business days), or "none". */
 function payLinkState_(ids) {
-  if (!stripeKey_()) return "none";
-  let pending = false;
+  return paidSession_(ids).state;
+}
+
+/* The checkout behind that state — the paid one, else one still
+   clearing — with its charge expanded so a receipt can name the card. */
+function paidSession_(ids) {
+  if (!stripeKey_()) return { state: "none", session: null };
+  let pending = null;
   for (let i = 0; i < ids.length; i++) {
     if (!ids[i]) continue;
-    const r = stripe_("get", "/checkout/sessions?payment_link=" + encodeURIComponent(ids[i]) + "&limit=20");
+    const r = stripe_("get", "/checkout/sessions?payment_link=" + encodeURIComponent(ids[i]) + "&limit=20&expand[]=data.payment_intent.latest_charge");
     const d = r.data || [];
-    if (d.some(x => x.payment_status === "paid")) return "paid";
-    if (d.some(x => x.status === "complete")) pending = true;
+    const paid = d.find(x => x.payment_status === "paid");
+    if (paid) return { state: "paid", session: paid };
+    if (!pending) pending = d.find(x => x.status === "complete") || null;
   }
-  return pending ? "pending" : "none";
+  return pending ? { state: "pending", session: pending } : { state: "none", session: null };
 }
+
+/* What a receipt says about a payment: how much, when, with what. */
+function receiptOf_(session) {
+  const pi = session && typeof session.payment_intent === "object" ? session.payment_intent : null;
+  const ch = pi && typeof pi.latest_charge === "object" ? pi.latest_charge : null;
+  const pm = (ch && ch.payment_method_details) || {};
+  const brand = pm.card && pm.card.brand ? pm.card.brand.charAt(0).toUpperCase() + pm.card.brand.slice(1) : "Card";
+  const method = pm.type === "card" ? brand + " •••• " + pm.card.last4
+    : pm.type === "us_bank_account" ? (pm.us_bank_account.bank_name || "Bank account") + " •••• " + pm.us_bank_account.last4
+    : pm.type === "link" ? "Link" : "";
+  return {
+    amount: session ? (session.amount_total || 0) / 100 : 0,
+    when: new Date(((ch && ch.created) || (session && session.created) || Date.now() / 1000) * 1000),
+    method: method,
+    url: (ch && ch.receipt_url) || "",
+  };
+}
+
+/* A sheet timestamp (Date, ISO string or yyyy-mm-dd) as a ranch-time day,
+   "October 9, 2026" — an evening payment's UTC stamp is already tomorrow. */
+function dayText_(v) {
+  if (!v) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(v))) return prettyDate_(String(v));
+  const d = v instanceof Date ? v : new Date(v);
+  return isNaN(d.getTime()) ? String(v) : Utilities.formatDate(d, Session.getScriptTimeZone(), "MMMM d, yyyy");
+}
+
+function whenText_(d) { return Utilities.formatDate(d, Session.getScriptTimeZone(), "MMMM d, yyyy 'at' h:mm a"); }
 
 /* Every page of a Stripe list, up to `max` items. */
 function stripeList_(path, params, max) {
@@ -1164,6 +1216,317 @@ function stripeActivity_() {
       };
     }),
   };
+}
+
+/* ---- payments land once: recorded once, the customer told once ----
+   The customer's page, the Ranch Office and the ten-minute timer can all
+   ask at the same moment; the script lock and a re-read of the row make
+   sure only the first one records it and sends the email. */
+
+function withLock_(fn) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try { return fn(); } finally { lock.releaseLock(); }
+}
+
+function rowAt_(at) { return sheet_().getRange(at, 1, 1, HEADERS.length).getValues()[0]; }
+
+/* The deposit, if Stripe has it: reserved, dated, receipt sent.
+   { row, paid } — paid is true when it's in, now or before. Null: no such order. */
+function landDeposit_(code) {
+  const got = withLock_(() => {
+    const at = orderRow_(code);
+    if (at < 0) return null;
+    const row = rowAt_(at);
+    if (row[2] !== "pending-deposit") return { row: row, paid: true };
+    if (!row[29] || !stripeKey_()) return { row: row, paid: false };
+    let hit;
+    try { hit = paidSession_([String(row[29])]); } catch (err) { return { row: row, paid: false }; }
+    if (hit.state !== "paid") return { row: row, paid: false };
+    const sh = sheet_(), now = new Date().toISOString();
+    sh.getRange(at, COL_STATUS).setValue("reserved");
+    sh.getRange(at, COL_DEP_PAID).setValue(now);
+    row[2] = "reserved"; row[31] = now;
+    return { row: row, paid: true, landed: true, receipt: receiptOf_(hit.session) };
+  });
+  if (!got || !got.landed) return got;
+  const order = orderFromRow_(got.row);
+  const summary = String(got.row[11] || "");
+  const cost = { total: got.row[8], deposit: got.row[9], balance: got.row[10] };
+  try { notifyRanch_(order, summary, cost); } catch (err) { /* don't fail the customer for a ranch email */ }
+  try { confirmCustomer_(withGroup_(order), summary, cost, null, true, got.receipt); } catch (err) { /* ditto */ }
+  /* an organizer's group deposit also covers friends who joined before it landed */
+  if (order.depositKind === "group") releaseCovered_(order.code);
+  return got;
+}
+
+/* The invoice balance, if Stripe has it: dated, receipt (with the paid
+   invoice attached) to the customer, a note to the ranch. A bank payment
+   still clearing is noted as "pending" and nothing is sent yet.
+   { row, state: "paid" | "pending" | "none" }. Null: no such order. */
+function landBalance_(code, opts) {
+  opts = opts || {};
+  const got = withLock_(() => {
+    const at = orderRow_(code);
+    if (at < 0) return null;
+    const row = rowAt_(at);
+    if (row[22]) return { row: row, state: "paid" };
+    if (!(row[17] || row[25]) || !stripeKey_()) return { row: row, state: "none" };
+    const hit = paidSession_([String(row[17] || ""), String(row[25] || "")]);
+    const sh = sheet_();
+    if (hit.state === "pending" && row[24] !== "pending") { sh.getRange(at, COL_PAY_STATE).setValue("pending"); row[24] = "pending"; }
+    if (hit.state !== "paid") return { row: row, state: hit.state };
+    const receipt = receiptOf_(hit.session);
+    /* a card payment carries the card fee on top of the balance — say so,
+       or "$1,185" next to a "$1,150 balance" looks like an overcharge */
+    const o = orderFromRow_(row), price = o ? priceFor_(o, steerFor_(o), withGroup_(o).groupFrac) : null;
+    const withFee = price && receipt.amount > price.balance + 0.5;
+    const paidWith = (receipt.method ? receipt.method + " · " : "") + money_(receipt.amount)
+      + (withFee ? " incl. " + Math.round(CARD_FEE_PCT * 100) + "% card fee" : "");
+    sh.getRange(at, COL_PAID_AT).setValue(receipt.when.toISOString());
+    sh.getRange(at, COL_PAY_STATE).setValue("paid");
+    sh.getRange(at, COL_PAID_WITH).setValue(paidWith);
+    row[22] = receipt.when.toISOString(); row[24] = "paid"; row[36] = paidWith;
+    return { row: row, state: "paid", landed: true, receipt: receipt };
+  });
+  if (!got || !got.landed) return got;
+  const order = withGroup_(orderFromRow_(got.row));
+  const steer = steerFor_(order);
+  const price = priceFor_(order, steer, order.groupFrac);
+  try { balanceReceipt_(order, steer, price, got.receipt, got.row); } catch (err) { console.error("balance receipt " + code + ": " + err); }
+  if (!opts.quietRanch) {
+    try { notifyRanchPaid_(order, got.receipt, got.row); } catch (err) { /* keep going */ }
+  }
+  return got;
+}
+
+/* Every ten minutes (installPaymentSync sets it up): deposits and
+   balances Stripe has taken since anyone looked. */
+function syncPayments() {
+  if (!stripeKey_()) return;
+  rows_().forEach(r => {
+    const code = String(r[0] || "").trim().toUpperCase();
+    if (!code) return;
+    try {
+      if (r[2] === "pending-deposit" && r[29]) landDeposit_(code);
+      else if (!r[22] && (r[17] || r[25])) landBalance_(code);
+    } catch (err) { console.error("syncPayments " + code + ": " + err); }
+  });
+}
+
+/* RUN THIS ONCE FROM THE EDITOR: pick `installPaymentSync` and press Run.
+   Google asks for the new "run when you're not there" permission, then
+   syncPayments runs every ten minutes on its own. Safe to run again. */
+function installPaymentSync() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === "syncPayments")
+    .forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger("syncPayments").timeBased().everyMinutes(10).create();
+  syncPayments();
+  Logger.log("Payment sync is on: every 10 minutes, deposits and invoice payments are recorded and receipts sent.");
+}
+
+/* ---- ready for pickup ---- */
+
+/* One order: the steer has a pickup window and the balance is paid
+   (or Josh says it was paid outside Stripe) → the email, with the paid
+   invoice attached, and the order moves to "ready". */
+function pickupReady_(code, paidOutside) {
+  const at = orderRow_(code);
+  if (at < 0) return { ok: false, error: "no order " + code };
+  let row = rowAt_(at);
+  const order = withGroup_(orderFromRow_(row));
+  const steer = steerFor_(order);
+  if (!steer) return { ok: false, error: "no steer linked" };
+  if (!steer.pickupFrom || !steer.pickupUntil) return { ok: false, error: "steer " + steer.id + " has no pickup window" };
+  if (!order.email) return { ok: false, error: "no email address" };
+  const price = priceFor_(order, steer, order.groupFrac);
+  if (!price) return { ok: false, error: "steer " + steer.id + " has no hanging weight" };
+  const sh = sheet_();
+  if (!row[22]) {
+    /* the timer may not have looked yet */
+    try { const b = landBalance_(code); if (b) row = b.row; } catch (err) { /* fall through */ }
+  }
+  if (!row[22]) {
+    if (!paidOutside) return { ok: false, unpaid: true, error: "Stripe shows no balance payment" };
+    const now = new Date().toISOString();
+    sh.getRange(at, COL_PAID_AT).setValue(now);
+    sh.getRange(at, COL_PAY_STATE).setValue("outside");
+    sh.getRange(at, COL_PAID_WITH).setValue("paid outside Stripe");
+    row[22] = now; row[24] = "outside"; row[36] = "paid outside Stripe";
+  }
+  const pdf = invoiceConfirmationPdf_(order, steer, price, row);
+  pickupEmail_(order, steer, price, pdf);
+  sh.getRange(at, COL_STATUS).setValue("ready");
+  sh.getRange(at, COL_READY_AT).setValue(new Date().toISOString());
+  return { ok: true };
+}
+
+/* "Saturday, January 9" — a pickup day, with the weekday so nobody
+   drives to Kersey on a Sunday. */
+function pickupDay_(ymd) {
+  const parts = String(ymd || "").split("-");
+  const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  return isNaN(d.getTime()) ? String(ymd || "") : Utilities.formatDate(d, Session.getScriptTimeZone(), "EEEE, MMMM d");
+}
+
+function pickupWindow_(steer) {
+  return pickupDay_(steer.pickupFrom) + " – " + pickupDay_(steer.pickupUntil) + ", " + String(steer.pickupUntil).slice(0, 4);
+}
+
+/* What the paid invoice says. Shared by the receipt and the pickup
+   email's attachment so they can never disagree. */
+function paidLines_(order, price, row) {
+  const lines = [["Beef — " + price.shareLbs + " lb × $" + price.rate.toFixed(2) + "/lb", money_(price.beefTotal)]];
+  if (price.pattyCharge > 0) lines.push(["Patties — " + price.pattyLbs + " lb × $" + PATTY_RATE.toFixed(2) + "/lb", money_(price.pattyCharge)]);
+  lines.push(["Total", money_(price.total)]);
+  if (price.deposit > 0) lines.push(["Deposit paid" + (order.depositPaidAt ? " " + dayText_(order.depositPaidAt) : ""), "−" + money_(price.deposit)]);
+  if (row[22]) lines.push(["Balance paid " + dayText_(row[22]) + (row[36] ? " · " + row[36] : ""), "−" + money_(price.balance)]);
+  return lines;
+}
+
+/* The final invoice, marked paid, as a PDF. */
+function invoiceConfirmationPdf_(order, steer, price, row) {
+  const paid = !!row[22];
+  const lines = paidLines_(order, price, row);
+  const cell = 'style="padding:7px 0;border-bottom:1px solid #ddd"';
+  const html = [
+    '<html><head><meta charset="utf-8"></head><body style="font-family:Helvetica,Arial,sans-serif;color:#2b2521;font-size:12px;margin:36px">',
+    '<table style="width:100%"><tr><td><div style="font-size:22px;font-weight:bold">Thunderbolt Ranch LLC</div>',
+    '<div style="color:#666">thunderboltbeef.com · ' + RANCH_INBOX + '</div></td>',
+    '<td style="text-align:right;vertical-align:top"><div style="font-size:16px;font-weight:bold">' + (paid ? 'FINAL INVOICE — PAID IN FULL' : 'FINAL INVOICE') + '</div>',
+    '<div style="color:#666">Order ' + esc_(order.code) + ' · issued ' + dayText_(new Date()) + '</div></td></tr></table>',
+    '<hr style="border:0;border-top:2px solid #2b2521;margin:16px 0">',
+    '<table style="width:100%;font-size:12px"><tr>',
+    '<td style="vertical-align:top;width:50%"><div style="color:#888;font-size:10px;text-transform:uppercase;letter-spacing:1px">Billed to</div>',
+    '<div>' + esc_(order.name) + '</div><div>' + esc_(order.email) + '</div>' + (order.phone ? '<div>' + esc_(order.phone) + '</div>' : '') + '</td>',
+    '<td style="vertical-align:top"><div style="color:#888;font-size:10px;text-transform:uppercase;letter-spacing:1px">Your beef</div>',
+    '<div>' + esc_(shareLabel_(order.share)) + ' share · steer ' + esc_(steer.id) + '</div>',
+    '<div>' + price.hangingLbs + ' lb hanging · your share ' + price.shareLbs + ' lb</div>',
+    order.signedBy ? '<div>Cut sheet signed by ' + esc_(order.signedBy) + (order.signedAt ? ', ' + dayText_(order.signedAt) : '') + '</div>' : '',
+    '</td></tr></table>',
+    '<table style="width:100%;border-collapse:collapse;margin-top:18px;font-size:12px">',
+  ].concat(lines.map(l => '<tr><td ' + cell + '>' + esc_(l[0]) + '</td><td ' + cell + ' align="right">' + esc_(l[1]) + '</td></tr>')).concat([
+    '<tr><td style="padding:10px 0;font-weight:bold;font-size:14px;border-top:2px solid #2b2521">Amount due</td>',
+    '<td style="padding:10px 0;font-weight:bold;font-size:14px;border-top:2px solid #2b2521" align="right">' + (paid ? '$0' : money_(price.balance)) + '</td></tr>',
+    '</table>',
+    steer.pickupFrom && steer.pickupUntil
+      ? '<div style="margin-top:22px;padding:12px 14px;background:#f3ecd8"><b>Pickup ' + esc_(pickupWindow_(steer)) + '</b><br>'
+        + esc_(BUTCHER_NAME) + ', ' + esc_(BUTCHER_ADDRESS) + ' · ' + BUTCHER_PHONE + '<br>' + esc_(BUTCHER_HOURS.join(" · ")) + '</div>'
+      : '',
+    '<p style="color:#666;margin-top:22px">Nothing is due at pickup. Thank you for buying beef straight from the ranch.</p>',
+    '</body></html>',
+  ]).join("");
+  return Utilities.newBlob(html, "text/html", "invoice.html").getAs("application/pdf")
+    .setName("Thunderbolt-Ranch-invoice-" + order.code + (paid ? "-paid" : "") + ".pdf");
+}
+
+/* "Payment received" for the invoice balance. */
+function balanceReceipt_(o, steer, price, receipt, row) {
+  const first = (o.name || "").split(" ")[0];
+  const signUrl = row[19] && !row[20] ? SITE_URL + "/#/confirm/" + o.code + "?t=" + row[19] : "";
+  const paidLine = "We received your payment of " + money_(receipt.amount) + (receipt.method ? " (" + receipt.method + ")" : "")
+    + " on " + whenText_(receipt.when) + ". Order " + o.code + " is paid in full.";
+  const lines = price ? paidLines_(o, price, row) : [];
+  const next = signUrl
+    ? "One step left: sign off on your cut sheet so it can go to the butcher — " + signUrl
+    : "Your signed cut sheet is going to the butcher. We'll email you when your beef is ready, with the pickup window and directions.";
+  const text = ["Hi " + first + ",", "", paidLine, ""]
+    .concat(lines.map(l => l[0] + ": " + l[1]))
+    .concat(["Amount due: $0", "", next, "", receipt.url ? "Stripe receipt: " + receipt.url : "", "Your paid invoice is attached. Questions? Just reply.", "", "— Thunderbolt Ranch · Ranch to Table"]);
+  const html = [
+    '<div style="font-family:Georgia,serif;color:#2b2521;max-width:620px;margin:0 auto;line-height:1.55">',
+    '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#5b7a4e">Thunderbolt Ranch · Payment received</div>',
+    '<h1 style="font-weight:400;font-size:26px;margin:6px 0 14px">Paid in full — thank you, ' + esc_(first) + '.</h1>',
+    '<p>' + esc_(paidLine) + '</p>',
+    '<table style="border-collapse:collapse;font-family:Helvetica,Arial,sans-serif;font-size:14px;width:100%">',
+  ].concat(lines.map(l => '<tr><td style="padding:6px 0;border-bottom:1px solid #e6e0d4">' + esc_(l[0]) + '</td><td style="text-align:right;border-bottom:1px solid #e6e0d4">' + esc_(l[1]) + '</td></tr>')).concat([
+    '<tr style="font-weight:700"><td style="padding:10px 0">Amount due</td><td style="text-align:right">$0</td></tr></table>',
+    signUrl
+      ? '<p style="margin:18px 0"><a href="' + signUrl + '" style="display:inline-block;padding:13px 22px;background:#7a3b22;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-family:Helvetica,Arial,sans-serif">Sign off on your cut sheet</a><br><span style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#555">One step left — it goes to the butcher once you sign.</span></p>'
+      : '<p>' + esc_(next) + '</p>',
+    receipt.url ? '<p style="font-family:Helvetica,Arial,sans-serif;font-size:13px"><a href="' + receipt.url + '" style="color:#7a3b22">Stripe receipt</a></p>' : '',
+    '<p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#555">Your paid invoice is attached. Questions? Just reply to this email.</p>',
+    '<p style="color:#888;font-size:13px">— Thunderbolt Ranch · Ranch to Table</p></div>',
+  ]).join("");
+  const msg = { to: o.email, subject: "Payment received — order " + o.code + " is paid in full", body: text.filter(x => x !== null).join("\n"), htmlBody: html, name: "Thunderbolt Ranch", replyTo: RANCH_INBOX };
+  if (price && steer) msg.attachments = [invoiceConfirmationPdf_(o, steer, price, row)];
+  MailApp.sendEmail(msg);
+}
+
+/* The ranch hears about a balance the timer (or the customer's page) found. */
+function notifyRanchPaid_(o, receipt, row) {
+  const signed = !!row[20], sent = !!row[23];
+  MailApp.sendEmail({
+    to: RANCH_INBOX,
+    subject: "💵 Balance paid — " + o.code + " · " + o.name + " · " + money_(receipt.amount),
+    body: [
+      o.name + " paid " + money_(receipt.amount) + (receipt.method ? " (" + receipt.method + ")" : "") + " on " + whenText_(receipt.when) + ". They've been sent a receipt.",
+      "",
+      !signed ? "They haven't signed off on the cut sheet yet — the receipt reminds them."
+        : sent ? "Their signed sheet already went to the butcher."
+          : "They signed while the payment was clearing, so the signed sheet did NOT go to the butcher. Forward it from the \"Signed cut sheet — " + o.code + "\" email to " + butcherEmail_() + ".",
+      "",
+      "Ranch Office: " + SITE_URL + "/#/customers",
+    ].join("\n"),
+  });
+}
+
+/* "Your beef is ready" — the pickup window, where, when they're open,
+   who to call, and the paid invoice attached. */
+function pickupEmail_(o, steer, price, pdf) {
+  const first = (o.name || "").split(" ")[0];
+  const share = shareLabel_(o.share).toLowerCase();
+  const windowText = pickupWindow_(steer);
+  const tell = "Tell them you're picking up Thunderbolt Ranch beef for " + o.name + " — steer " + steer.id + ", order " + o.code + ".";
+  const tips = [
+    "Nothing to pay at pickup — your balance is paid.",
+    "It comes out frozen, vacuum-sealed, labeled and boxed. Leave room in the vehicle and clear space in the freezer before you go.",
+    "Please pick up by " + pickupDay_(steer.pickupUntil) + " — a $10/day storage fee applies after that.",
+    "Running late or need a different day? Call the butcher at " + BUTCHER_PHONE + ".",
+  ];
+  const text = [
+    "Hi " + first + ",",
+    "",
+    "Thank you for paying in full — your " + share + " beef is ready.",
+    "",
+    "PICK UP: " + windowText,
+    BUTCHER_NAME + ", " + BUTCHER_ADDRESS,
+    "Map: " + BUTCHER_MAP,
+    "Phone: " + BUTCHER_PHONE,
+    "Hours: " + BUTCHER_HOURS.join(" · "),
+    "",
+    tell,
+    "",
+  ].concat(tips.map(t => "• " + t)).concat([
+    "",
+    "Your paid invoice is attached. Questions about your order? Just reply.",
+    "",
+    "— Thunderbolt Ranch · Ranch to Table",
+  ]);
+  const html = [
+    '<div style="font-family:Georgia,serif;color:#2b2521;max-width:620px;margin:0 auto;line-height:1.55">',
+    '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#5b7a4e">Thunderbolt Ranch · Ready for pickup</div>',
+    '<h1 style="font-weight:400;font-size:26px;margin:6px 0 14px">Your beef is ready, ' + esc_(first) + '.</h1>',
+    '<p>Thank you for paying in full. Your ' + esc_(share) + ' is cut, wrapped and frozen at the butcher.</p>',
+    '<div style="margin:18px 0;padding:18px;background:#2b2521;color:#f3eee6;border-radius:4px;font-family:Helvetica,Arial,sans-serif">',
+    '<div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c8a85a">Pick up</div>',
+    '<div style="font-size:20px;margin:6px 0 12px;font-family:Georgia,serif">' + esc_(windowText) + '</div>',
+    '<div style="font-size:15px"><b>' + esc_(BUTCHER_NAME) + '</b><br><a href="' + BUTCHER_MAP + '" style="color:#f3eee6">' + esc_(BUTCHER_ADDRESS) + '</a><br>',
+    '<a href="tel:' + BUTCHER_PHONE + '" style="color:#f3eee6">' + BUTCHER_PHONE + '</a></div>',
+    '<div style="font-size:13px;color:#cfc6b8;margin-top:10px">' + BUTCHER_HOURS.map(esc_).join('<br>') + '</div>',
+    '</div>',
+    '<p style="font-family:Helvetica,Arial,sans-serif;font-size:14px;padding:12px 16px;background:#f3ecd8;border-left:4px solid #b08d45">' + esc_(tell) + '</p>',
+    '<ul style="font-family:Helvetica,Arial,sans-serif;font-size:14px;color:#444;padding-left:20px">',
+  ].concat(tips.map(t => '<li style="margin:6px 0">' + esc_(t) + '</li>')).concat([
+    '</ul>',
+    '<p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#555">Your paid invoice is attached. Questions about your order? Just reply to this email.</p>',
+    '<p style="color:#888;font-size:13px">— Thunderbolt Ranch · Ranch to Table</p></div>',
+  ]).join("");
+  MailApp.sendEmail({
+    to: o.email, subject: "Your Thunderbolt Ranch beef is ready for pickup — " + o.code,
+    body: text.join("\n"), htmlBody: html, name: "Thunderbolt Ranch", replyTo: RANCH_INBOX, attachments: [pdf],
+  });
 }
 
 /* ---- the emails ---- */

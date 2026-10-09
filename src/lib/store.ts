@@ -133,7 +133,8 @@ export interface Order {
   signedAt?: string;
   paidAt?: string;
   butcherSentAt?: string;
-  payState?: "paid" | "pending";   // what Stripe showed when they signed
+  payState?: "paid" | "pending" | "outside";   // Stripe's word on the balance; "outside" = Josh marked it paid
+  readyEmailedAt?: string; // when the ready-for-pickup email went out
 }
 
 /* ---------------- steers + season (back office) ---------------- */
@@ -144,6 +145,8 @@ export interface Steer {
   hangingWeight?: number;  // lb, once it's on the hook
   readyDate?: string;      // yyyy-mm-dd, estimated
   killDate?: string;       // yyyy-mm-dd, the day it was harvested
+  pickupFrom?: string;     // yyyy-mm-dd, the butcher's pickup window —
+  pickupUntil?: string;    //   both set unlocks "Ready for pickup"
   /** $/lb hanging for this animal. Unset = the standard HANGING_RATE.
       Set below standard when a heavy carcass would otherwise push a
       customer's bill up more than feels fair. */

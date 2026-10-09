@@ -18,7 +18,7 @@ import { downloadCutSheet, buildFilledCutSheet, bytesToBase64 } from "../lib/cut
 import { finalPrice, depositCredit } from "../lib/estimate";
 import {
   backendConfigured, checkAdminKey, fetchOffice, pushStatus,
-  pushSteer, removeSteer, pushAssignment, pushSettings, sendInvoice, checkStripe, checkDeposit, type Office,
+  pushSteer, removeSteer, pushAssignment, pushSettings, sendInvoice, checkStripe, checkDeposit, sendPickupReady, type Office,
 } from "../lib/api";
 import { refreshAvailability, steerCount } from "../lib/availability";
 import SteerTracker from "../components/SteerTracker";
@@ -33,7 +33,13 @@ function actualTotal(o: Order, steer?: Steer): number | null {
 }
 
 const fmtDate = (iso?: string) =>
-  iso ? new Date(iso + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
+  iso ? new Date(iso.slice(0, 10) + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
+
+/* "Sat, Jan 9 – Sat, Jan 23" — weekdays, so nobody books a Sunday */
+const fmtWindow = (s: Steer) => {
+  const d = (x: string) => new Date(x + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return s.pickupFrom && s.pickupUntil ? `${d(s.pickupFrom)} – ${d(s.pickupUntil)}` : "";
+};
 
 const AUTH_KEY = "tr.admin.v1";
 const KEY_KEY = "tr.admin.key";
@@ -99,15 +105,16 @@ async function exportCutSheets(orders: Order[], steers: Steer[], season: Season)
 
 /* One steer, editable in place. `steer` undefined = the blank "add" row. */
 function SteerRow({
-  steer, linked, taken, onSave, onRemove,
+  steer, linked, taken, onSave, onRemove, onReady,
 }: {
   steer?: Steer;
   linked: Order[];
   taken: string[];                 // ids already in use by other steers
   onSave: (next: Steer, originalId?: string) => Promise<void> | void;
   onRemove?: () => void;
+  onReady?: () => Promise<void> | void;   // ready-for-pickup emails to everyone paid on this steer
 }) {
-  const blank = { id: "", season: CURRENT_SEASON as SeasonId, hangingWeight: "", readyDate: "", rate: "", killDate: "" };
+  const blank = { id: "", season: CURRENT_SEASON as SeasonId, hangingWeight: "", readyDate: "", rate: "", killDate: "", pickupFrom: "", pickupUntil: "" };
   const from = (s?: Steer) =>
     s ? {
       id: s.id, season: s.season,
@@ -115,10 +122,13 @@ function SteerRow({
       readyDate: s.readyDate ?? "",
       rate: s.rate ? String(s.rate) : "",
       killDate: s.killDate ?? "",
+      pickupFrom: s.pickupFrom ?? "",
+      pickupUntil: s.pickupUntil ?? "",
     } : blank;
   const [d, setD] = useState(() => from(steer));
   const [busy, setBusy] = useState(false);
-  useEffect(() => { setD(from(steer)); }, [steer?.id, steer?.season, steer?.hangingWeight, steer?.readyDate, steer?.rate, steer?.killDate]);
+  const [readyBusy, setReadyBusy] = useState(false);
+  useEffect(() => { setD(from(steer)); }, [steer?.id, steer?.season, steer?.hangingWeight, steer?.readyDate, steer?.rate, steer?.killDate, steer?.pickupFrom, steer?.pickupUntil]);
 
   const id = d.id.trim();
   const dirty = JSON.stringify(d) !== JSON.stringify(from(steer));
@@ -129,12 +139,20 @@ function SteerRow({
   const rateBad = rate !== undefined && !(rate > 0);
   const rateCut = rate !== undefined && rate < HANGING_RATE;
   const claimed = linked.reduce((t, o) => t + SHARES[o.share].frac, 0);
+  const windowBad = !!d.pickupFrom && !!d.pickupUntil && d.pickupFrom > d.pickupUntil;
+  /* the emails go off the saved window, not what's half-typed */
+  const windowSet = !!steer?.pickupFrom && !!steer?.pickupUntil;
+  const toEmail = linked.filter((o) => !o.sample && !o.readyEmailedAt);
+  const paidToEmail = toEmail.filter((o) => o.paidAt);
   const label = steer ? `steer ${steer.id}` : "new steer";
 
   const save = async () => {
     setBusy(true);
     try {
-      await onSave({ id, season: d.season, hangingWeight: weight, readyDate: d.readyDate || undefined, rate, killDate: d.killDate || undefined }, steer?.id);
+      await onSave({
+        id, season: d.season, hangingWeight: weight, readyDate: d.readyDate || undefined, rate, killDate: d.killDate || undefined,
+        pickupFrom: d.pickupFrom || undefined, pickupUntil: d.pickupUntil || undefined,
+      }, steer?.id);
       if (!steer) setD(blank);
     } finally {
       setBusy(false);
@@ -182,6 +200,26 @@ function SteerRow({
           onChange={(e) => setD({ ...d, readyDate: e.target.value })} />
       </td>
       <td>
+        <div className="pickup-window">
+          <input className="admin-input" type="date" value={d.pickupFrom} aria-label={`Earliest pickup for ${label}`}
+            onChange={(e) => setD({ ...d, pickupFrom: e.target.value })} />
+          <span className="admin-sub">to</span>
+          <input className="admin-input" type="date" value={d.pickupUntil} min={d.pickupFrom || undefined} aria-label={`Latest pickup for ${label}`}
+            onChange={(e) => setD({ ...d, pickupUntil: e.target.value })} />
+        </div>
+        {windowBad && <span className="admin-sub" style={{ color: "var(--rust)" }}>Ends before it starts</span>}
+        {steer && onReady && (
+          <button className="small" style={{ textDecoration: "underline", marginTop: 6 }}
+            disabled={!windowSet || readyBusy || paidToEmail.length === 0}
+            title={!windowSet ? "Save both pickup dates first"
+              : paidToEmail.length === 0 ? (toEmail.length ? "No one on this steer has paid their balance yet" : "Everyone on this steer has been emailed")
+                : `Email ${paidToEmail.map((o) => o.name).join(", ")}`}
+            onClick={async () => { setReadyBusy(true); try { await onReady(); } finally { setReadyBusy(false); } }}>
+            {readyBusy ? "Sending…" : `Ready for pickup → ${paidToEmail.length} paid`}
+          </button>
+        )}
+      </td>
+      <td>
         {steer && (
           <>
             <span className={"admin-chip" + (claimed > 1 ? " hot" : claimed === 1 ? " done" : "")}>
@@ -195,7 +233,7 @@ function SteerRow({
       </td>
       <td>
         <div className="row-actions">
-          <button className="btn btn-ghost" disabled={busy || !id || clash || weightBad || rateBad || !dirty} onClick={save}>
+          <button className="btn btn-ghost" disabled={busy || !id || clash || weightBad || rateBad || windowBad || !dirty} onClick={save}>
             {busy ? "Saving…" : steer ? "Save" : "Add steer"}
           </button>
           {onRemove && (
@@ -277,6 +315,8 @@ export default function Customers() {
   const [tick, setTick] = useState(0);
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
   const [invoiceBusy, setInvoiceBusy] = useState<string | null>(null);
+  const [pickupBusy, setPickupBusy] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [exportSeason, setExportSeason] = useState<SeasonId>(CURRENT_SEASON);
   const [stripeNote, setStripeNote] = useState<string | null>(null);
   const testStripe = async () => {
@@ -393,6 +433,52 @@ export default function Customers() {
     }
   };
 
+  /* "Your beef is ready" — only once the steer has a pickup window. A
+     balance Stripe hasn't seen needs Josh to say it was paid another way. */
+  const pickupReady = async (o: Order) => {
+    const steer = steers.find((x) => x.id === o.steer);
+    if (!steer?.pickupFrom || !steer.pickupUntil) return;
+    const paid = !!o.paidAt;
+    const ask = paid
+      ? `Email ${o.name} that their beef is ready? Pickup ${fmtWindow(steer)} at Colorado Custom, with their paid invoice attached.`
+      : `Stripe shows no balance payment from ${o.name}.\n\nSend the ready-for-pickup email only if they've paid another way (check, cash, Venmo) — this marks their balance paid.`;
+    if (!window.confirm(ask)) return;
+    setPickupBusy(o.code);
+    setLoadError(null); setNotice(null);
+    try {
+      const [r] = (await sendPickupReady(adminKey, [o.code], !paid)).results;
+      if (r.ok) setNotice(`${o.code}: ready-for-pickup email sent to ${o.email}.`);
+      else setLoadError(`${o.code}: ${r.error}`);
+      setTick((t) => t + 1);
+    } catch (e) {
+      setLoadError(`Couldn't send ${o.code}'s pickup email: ${(e as Error).message}`);
+    } finally {
+      setPickupBusy(null);
+    }
+  };
+
+  /* the whole steer at once — paid customers only; the rest wait for their own button */
+  const steerReady = async (steer: Steer) => {
+    const todo = orders.filter((o) => o.steer === steer.id && !o.sample && !o.readyEmailedAt);
+    const paid = todo.filter((o) => o.paidAt);
+    const unpaid = todo.filter((o) => !o.paidAt);
+    if (!paid.length) return;
+    const ask = `Email ${paid.length} paid customer${paid.length === 1 ? "" : "s"} on steer ${steer.id} that their beef is ready? `
+      + `Pickup ${fmtWindow(steer)}.\n\n${paid.map((o) => o.name).join(", ")}`
+      + (unpaid.length ? `\n\nNot emailing ${unpaid.map((o) => o.name).join(", ")} — no balance payment yet. Send theirs from the roster once they've paid.` : "");
+    if (!window.confirm(ask)) return;
+    setLoadError(null); setNotice(null);
+    try {
+      const { results } = await sendPickupReady(adminKey, paid.map((o) => o.code));
+      const sent = results.filter((r) => r.ok), failed = results.filter((r) => !r.ok);
+      if (sent.length) setNotice(`Steer ${steer.id}: ready-for-pickup email sent to ${sent.length}.`);
+      if (failed.length) setLoadError(failed.map((r) => `${r.code}: ${r.error}`).join(" · "));
+      setTick((t) => t + 1);
+    } catch (e) {
+      setLoadError(`Couldn't send steer ${steer.id}'s pickup emails: ${(e as Error).message}`);
+    }
+  };
+
   const unlock = async (e: React.FormEvent) => {
     e.preventDefault();
     const key = code.trim();
@@ -467,6 +553,7 @@ export default function Customers() {
             {!live && " · local demo mode"}
           </p>
           {loadError && <p className="small" style={{ color: "var(--rust)" }}>Order system: {loadError}</p>}
+          {notice && <p className="small" style={{ color: "var(--sage)" }}>{notice}</p>}
           {stripeNote && <p className="small" style={{ color: stripeNote.startsWith("Stripe OK") ? "var(--sage)" : "var(--rust)" }}>{stripeNote}</p>}
         </div>
         <div className="admin-actions">
@@ -602,7 +689,22 @@ export default function Customers() {
                     >
                       {invoiceBusy === o.code ? "Sending…" : (invoiceSent[o.code] || o.invoicedAt) ? "Re-send invoice" : "Email invoice"}
                     </button>
-                    {(o.invoicedAt || o.signedAt) && (
+                    {live && !o.sample && (
+                      <button
+                        className="small" style={{ textDecoration: "underline" }}
+                        disabled={!steer?.pickupFrom || !steer?.pickupUntil || !price || pickupBusy === o.code}
+                        title={
+                          !steer ? "Link this order to a steer first"
+                            : !steer.pickupFrom || !steer.pickupUntil ? `Set steer ${steer.id}'s pickup window on the Steers tab first`
+                              : !price ? "Weigh this order's steer first"
+                                : `Email ${o.email}: pickup ${fmtWindow(steer)}, paid invoice attached`
+                        }
+                        onClick={() => pickupReady(o)}
+                      >
+                        {pickupBusy === o.code ? "Sending…" : o.readyEmailedAt ? "Re-send pickup email" : "Ready for pickup"}
+                      </button>
+                    )}
+                    {(o.invoicedAt || o.signedAt || o.readyEmailedAt) && (
                       <span className="flow-chips">
                         {o.invoicedAt && <span className="admin-chip">invoiced {fmtDate(o.invoicedAt)}</span>}
                         {o.signedAt && <span className="admin-chip done">signed · {o.signedBy}</span>}
@@ -610,6 +712,7 @@ export default function Customers() {
                         {o.signedAt && !o.paidAt && o.payState === "pending" && <span className="admin-chip">ACH clearing</span>}
                         {o.signedAt && !o.paidAt && o.payState !== "pending" && <span className="admin-chip hot">no payment found</span>}
                         {o.butcherSentAt && <span className="admin-chip done">sent to CCMC</span>}
+                        {o.readyEmailedAt && <span className="admin-chip done">pickup email {fmtDate(o.readyEmailedAt)}</span>}
                       </span>
                     )}
                     </div>
@@ -721,7 +824,7 @@ export default function Customers() {
             <table className="admin-table steers">
               <thead>
                 <tr>
-                  <th>Steer ID</th><th>Harvest</th><th>Hanging weight</th><th>Price per lb</th><th>Kill date</th><th>Est. ready date</th><th>Orders</th><th></th>
+                  <th>Steer ID</th><th>Harvest</th><th>Hanging weight</th><th>Price per lb</th><th>Kill date</th><th>Est. ready date</th><th>Pickup window</th><th>Orders</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -733,10 +836,11 @@ export default function Customers() {
                     taken={steers.filter((x) => x.id !== st.id).map((x) => x.id)}
                     onSave={storeSteer}
                     onRemove={() => dropSteer(st)}
+                    onReady={live ? () => steerReady(st) : undefined}
                   />
                 ))}
                 {steers.length === 0 && (
-                  <tr><td colSpan={8} className="mute" style={{ textAlign: "center", padding: "var(--space-xl)" }}>
+                  <tr><td colSpan={9} className="mute" style={{ textAlign: "center", padding: "var(--space-xl)" }}>
                     No steers entered yet. Add the first one below.
                   </td></tr>
                 )}

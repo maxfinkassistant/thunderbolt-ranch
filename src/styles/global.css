@@ -1575,14 +1575,15 @@ h3.d { font-size: 1.4rem; }
   .office .roster th:nth-child(6) { width: 14%; }
   .office .roster th:nth-child(7) { width: 16%; }
   /* steers: id · harvest · hanging · $/lb · kill date · ready date · orders · save */
-  .office .steers th:nth-child(1) { width: 11%; }
-  .office .steers th:nth-child(2) { width: 13%; }
-  .office .steers th:nth-child(3) { width: 10%; }
-  .office .steers th:nth-child(4) { width: 12%; }
-  .office .steers th:nth-child(5) { width: 13%; }
-  .office .steers th:nth-child(6) { width: 13%; }
-  .office .steers th:nth-child(7) { width: 16%; }
-  .office .steers th:nth-child(8) { width: 12%; }
+  .office .steers th:nth-child(1) { width: 9%; }
+  .office .steers th:nth-child(2) { width: 11%; }
+  .office .steers th:nth-child(3) { width: 8%; }
+  .office .steers th:nth-child(4) { width: 11%; }
+  .office .steers th:nth-child(5) { width: 11%; }
+  .office .steers th:nth-child(6) { width: 11%; }
+  .office .steers th:nth-child(7) { width: 13%; }   /* pickup window */
+  .office .steers th:nth-child(8) { width: 15%; }
+  .office .steers th:nth-child(9) { width: 11%; }
   .office .steers .admin-input, .office .steers .admin-select { width: 100%; }
   .office .steers input[type="date"] { padding: 7px 6px; font-size: 0.8rem; }
 }
@@ -1637,3 +1638,7 @@ h3.d { font-size: 1.4rem; }
 .stripe-filters button.on { border: 2px solid var(--ink); font-weight: 600; }
 .office .admin-table.stripe td { white-space: nowrap; }
 .office .admin-table.stripe td .admin-sub { white-space: nowrap; }
+
+/* Steers tab: the butcher's pickup window */
+.pickup-window { display: grid; gap: 4px; }
+.pickup-window .admin-sub { margin: 0; }

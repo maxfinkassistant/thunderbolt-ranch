@@ -52,6 +52,17 @@ Stripe deposit.
 The Ranch Office **Stripe** tab (`src/components/StripePanel.tsx`, script action
 `stripe-activity`) shows all of this live.
 
+**Receipts + ready for pickup (2026-10-09):** deposits and invoice balances "land" once —
+`landDeposit_()` / `landBalance_()` in Code.gs, under a script lock — from the customer's
+return page, Check deposit, or the 10-minute `syncPayments` timer (`installPaymentSync`, run
+once from the editor; needs the `script.scriptapp` scope in `appsscript.json`). Landing sends the
+receipt email (deposit: the reserved email with a receipt block; balance: "Payment received"
+with the paid invoice PDF, made from HTML by `invoiceConfirmationPdf_()`). Steers have a pickup
+window (Steers sheet columns G–H); `pickup-ready` emails the customer with Colorado Custom's
+address/hours/phone and the PDF, sets status ready and "Ready emailed at". `bun run payments`
+(`scripts/payments.ts`) runs Code.gs against a fake sheet + Stripe and checks every email
+goes out exactly once — run it after touching any of this.
+
 **Not yet done / waiting on Max:**
 1. Dry run of the full order → deposit → confirmation → invite → invoice flow with Max's
    own email, in test mode or live-then-refund. The Orders sheet already holds one 0.25
