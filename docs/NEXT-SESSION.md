@@ -28,9 +28,11 @@ project: `project_christensen_ranch.md`.
 - Phone number removed everywhere; questions go to thunderboltbeef@gmail.com.
 
 **Two implementations of the pricing math must stay in step:** `finalPrice()` in
-`src/lib/estimate.ts` and `priceFor_()` in `apps-script/Code.gs`. There's a parity-test
-pattern in the git history (search commits for "cases, 0 mismatches"); re-run that idea
-after any pricing change.
+`src/lib/estimate.ts` and `priceFor_()` in `apps-script/Code.gs`. Run `bun run parity`
+(`scripts/parity.ts`) after any pricing change — it compares the two over 540 cases and
+pins the legacy deal. **Fall 2026 orders are priced on the old flat model** (steer's manual
+rate or $6.00 for every share, the $250 deposit they were placed with): see
+`FLAT_RATE_SEASONS` in both files. Tiers, groups and per-order deposits start with Winter 2027.
 
 **Done since 2026-10-08 noon (verified live):** script redeployed (`?action=group&code=TR-NOPE`
 → `{"ok":true,"group":null}`), tracker capacity 20 (availability answers `capacity:20`), $300
