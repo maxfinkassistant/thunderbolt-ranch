@@ -176,10 +176,15 @@ ok(outbox.filter((m) => /Balance paid — TR-BAL001/.test(m.subject)).length ===
 
 // C. ACH still clearing: pending, nobody emailed
 ok(cell("TR-ACH001", "Payment state") === "pending", "ACH marked pending");
-ok(mails("ash@example.com").length === 0, "no receipt while ACH clears");
+ok(mails("ash@example.com").length === 1 && /^Bank payment received/.test(mails("ash@example.com")[0].subject), "one clearing notice while ACH clears: " + mails("ash@example.com")[0]?.subject);
+ok(/nothing more to pay/.test(mails("ash@example.com")[0]?.body) && /four business days/.test(mails("ash@example.com")[0]?.body), "clearing notice says no need to pay again, and how long");
+gs.syncPayments(); gs.syncPayments();
+ok(mails("ash@example.com").length === 1, "clearing notice not repeated by the timer");
+ok(!!cell("TR-ACH001", "Clearing emailed at"), "clearing notice dated on the sheet");
 sessions.plink_ach2 = [{ ...achPending(2450), payment_status: "paid", payment_intent: { id: "pi_y", latest_charge: { created: 1791700000, receipt_url: "", payment_method_details: { type: "us_bank_account", us_bank_account: { bank_name: "CHASE", last4: "6789" } } } } }];
 gs.syncPayments();
-ok(mails("ash@example.com").length === 1 && /CHASE •••• 6789/.test(mails("ash@example.com")[0].body), "receipt once ACH clears, names the bank");
+const ashPaid = mails("ash@example.com", /^Payment received/);
+ok(mails("ash@example.com").length === 2 && ashPaid.length === 1 && /CHASE •••• 6789/.test(ashPaid[0].body), "paid-in-full receipt once ACH clears, names the bank");
 
 // D. sign while paid (they paid, came back, signed before the timer looked)
 // receipt yes, 💵 ranch email no (the signed-sheet email covers it), butcher gets it

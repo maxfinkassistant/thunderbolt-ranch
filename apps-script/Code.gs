@@ -70,7 +70,7 @@ const HEADERS = [
   "Card link id", "Card link URL",
   "Referral", "Group", "Deposit link id", "Deposit link URL", "Deposit paid at",
   "Deposit kind", "Deposit amount", "Group target",
-  "Ready emailed at", "Paid with",
+  "Ready emailed at", "Paid with", "Clearing emailed at",
 ];
 const COL_STATUS = 3, COL_STEER = 15, COL_SEASON = 16;
 /* final-invoice workflow columns (1-based) */
@@ -81,7 +81,8 @@ const COL_INVOICED = 17, COL_PLINK_ID = 18, COL_PLINK_URL = 19, COL_TOKEN = 20,
       COL_REFERRAL = 28, COL_GROUP = 29, COL_DEP_ID = 30, COL_DEP_URL = 31, COL_DEP_PAID = 32,
       COL_DEP_KIND = 33, COL_DEP_AMT = 34, COL_TARGET = 35,
       COL_READY_AT = 36,    // when the ready-for-pickup email went out
-      COL_PAID_WITH = 37;   // "Visa •••• 4242 · $1,301", for the paid invoice
+      COL_PAID_WITH = 37,   // "Visa •••• 4242 · $1,301", for the paid invoice
+      COL_CLEARING = 38;    // when the "bank payment received, clearing" email went out
 
 const SITE_URL = "https://thunderboltbeef.com";
 const RANCH_INBOX = "thunderboltbeef@gmail.com";
@@ -1321,6 +1322,13 @@ function landBalance_(code, opts) {
     const hit = paidSession_([String(row[17] || ""), String(row[25] || "")]);
     const sh = sheet_();
     if (hit.state === "pending" && row[24] !== "pending") { sh.getRange(at, COL_PAY_STATE).setValue("pending"); row[24] = "pending"; }
+    if (hit.state === "pending" && !row[37]) {
+      /* a bank payment takes days to clear — tell them now that we have it */
+      const now = new Date().toISOString();
+      sh.getRange(at, COL_CLEARING).setValue(now);
+      row[37] = now;
+      return { row: row, state: "pending", clearing: receiptOf_(hit.session) };
+    }
     if (hit.state !== "paid") return { row: row, state: hit.state };
     const receipt = receiptOf_(hit.session);
     /* a card payment carries the card fee on top of the balance — say so,
@@ -1335,6 +1343,9 @@ function landBalance_(code, opts) {
     row[22] = receipt.when.toISOString(); row[24] = "paid"; row[36] = paidWith;
     return { row: row, state: "paid", landed: true, receipt: receipt };
   });
+  if (got && got.clearing) {
+    try { clearingNotice_(withGroup_(orderFromRow_(got.row)), got.clearing, got.row); } catch (err) { console.error("clearing notice " + code + ": " + err); }
+  }
   if (!got || !got.landed) return got;
   const order = withGroup_(orderFromRow_(got.row));
   const steer = steerFor_(order);
@@ -1465,6 +1476,36 @@ function invoiceConfirmationPdf_(order, steer, price, row) {
   ]).join("");
   return Utilities.newBlob(html, "text/html", "invoice.html").getAs("application/pdf")
     .setName("Thunderbolt-Ranch-invoice-" + order.code + (paid ? "-paid" : "") + ".pdf");
+}
+
+/* A bank (ACH) payment has started but won't clear for about four
+   business days. Say we have it — the uncertainty is what sent people
+   back to pay twice — and that the paid-in-full receipt follows. */
+function clearingNotice_(o, receipt, row) {
+  const first = (o.name || "").split(" ")[0];
+  const signUrl = row[19] && !row[20] ? SITE_URL + "/#/confirm/" + o.code + "?t=" + row[19] : "";
+  const got = "We've received your bank payment of " + money_(receipt.amount) + (receipt.method ? " (" + receipt.method + ")" : "")
+    + " for order " + o.code + ". There's nothing more to pay.";
+  const wait = "Bank (ACH) payments take about four business days to clear. When it does, we'll send your paid-in-full receipt with your final invoice attached.";
+  const text = ["Hi " + first + ",", "", got, "", wait, ""]
+    .concat(signUrl ? ["One more step while you wait: sign off on your cut sheet so it can go to the butcher — " + signUrl, ""] : [])
+    .concat(["Questions? Just reply.", "", "— Thunderbolt Ranch · Ranch to Table"]);
+  const html = [
+    '<div style="font-family:Georgia,serif;color:#2b2521;max-width:620px;margin:0 auto;line-height:1.55">',
+    '<div style="font-family:Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#5b7a4e">Thunderbolt Ranch · Bank payment received</div>',
+    '<h1 style="font-weight:400;font-size:26px;margin:6px 0 14px">Got it, ' + esc_(first) + ' — your payment is on its way.</h1>',
+    '<p>' + esc_(got) + '</p>',
+    '<p style="font-family:Helvetica,Arial,sans-serif;font-size:14px;padding:12px 16px;background:#f3ecd8;border-left:4px solid #b08d45">' + esc_(wait) + '</p>',
+    signUrl
+      ? '<p style="margin:18px 0"><a href="' + signUrl + '" style="display:inline-block;padding:13px 22px;background:#7a3b22;color:#fff;text-decoration:none;border-radius:4px;font-weight:600;font-family:Helvetica,Arial,sans-serif">Sign off on your cut sheet</a><br><span style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#555">One more step while you wait — it goes to the butcher once you sign.</span></p>'
+      : '',
+    '<p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#555">Questions? Just reply to this email.</p>',
+    '<p style="color:#888;font-size:13px">— Thunderbolt Ranch · Ranch to Table</p></div>',
+  ].join("");
+  MailApp.sendEmail({
+    to: o.email, subject: "Bank payment received — order " + o.code + " (clearing)",
+    body: text.join("\n"), htmlBody: html, name: "Thunderbolt Ranch", replyTo: RANCH_INBOX,
+  });
 }
 
 /* "Payment received" for the invoice balance. */

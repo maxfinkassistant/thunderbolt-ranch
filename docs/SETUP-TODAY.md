@@ -126,8 +126,10 @@ counts toward the front-page tracker, so delete the test rows first.
   the double charges.)
 - **Balance receipt.** When the invoice is paid: *"Payment received — order … is paid in
   full"*, with the paid invoice PDF attached. If they haven't signed off on the cut sheet
-  yet, it has a button to do it. A bank (ACH) payment gets its receipt when it clears, not
-  when it's started.
+  yet, it has a button to do it.
+- **Bank (ACH) payments** take about four business days to clear. The moment one is started,
+  the customer gets *"Bank payment received — order … (clearing)"* — we have it, nothing more
+  to pay — and the paid-in-full receipt follows when it clears.
 - Stripe is checked when the customer comes back from paying, when you press Check deposit,
   and **every 10 minutes** in the background — whichever comes first sends the email, once.
   The ranch inbox gets a "💵 Balance paid" note for each balance payment (and is told to
