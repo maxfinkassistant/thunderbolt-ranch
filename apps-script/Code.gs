@@ -387,7 +387,7 @@ function doPost_(e) {
   let body;
   try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: "bad json" }); }
 
-  if (["status", "assign", "steer", "steer-delete", "settings", "invoice", "stripe-check", "stripe-activity", "stripe-ledger", "pickup-ready"].indexOf(body.action) >= 0) {
+  if (["status", "assign", "steer", "steer-delete", "settings", "invoice", "stripe-check", "stripe-activity", "stripe-ledger", "pickup-ready", "contact"].indexOf(body.action) >= 0) {
     if (!isAdmin_(body.key)) return json_({ ok: false, error: "bad key" });
     return adminPost_(body);
   }
@@ -643,6 +643,32 @@ function adminPost_(body) {
       catch (err) { return { code: code, ok: false, error: String(err && err.message || err) }; }
     });
     return json_({ ok: true, results: results });
+  }
+
+  if (body.action === "contact") {
+    /* fix a customer's name, email, phone or address — on the sheet's
+       columns AND inside the saved order, which is what every email reads */
+    const name = String(body.name || "").trim(), email = String(body.email || "").trim();
+    const phone = String(body.phone || "").trim(), address = String(body.address || "").trim();
+    if (!name) return json_({ ok: false, error: "name can't be empty" });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json_({ ok: false, error: "that email doesn't look right" });
+    const codes = (Array.isArray(body.codes) ? body.codes : [body.code]).map(c => String(c || "").trim().toUpperCase()).filter(Boolean);
+    if (!codes.length) return json_({ ok: false, error: "no order" });
+    const updated = withLock_(() => codes.map(code => {
+      const at = orderRow_(code);
+      if (at < 0) return code + ": not found";
+      const sh = sheet_();
+      const json = sh.getRange(at, 14).getValue();
+      let o;
+      try { o = JSON.parse(json); } catch (err) { return code + ": order data unreadable"; }
+      o.name = name; o.email = email; o.phone = phone; o.address = address;
+      /* text, so a phone number stays "1 775 846 0889", not 17758460889 */
+      sh.getRange(at, 4, 1, 4).setNumberFormat("@").setValues([[name, email, phone, address]]);
+      sh.getRange(at, 14).setValue(JSON.stringify(o));
+      return "";
+    }));
+    const failed = updated.filter(Boolean);
+    return failed.length ? json_({ ok: false, error: failed.join("; ") }) : json_({ ok: true, updated: codes.length });
   }
 
   if (body.action === "stripe-ledger") {

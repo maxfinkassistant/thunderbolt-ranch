@@ -109,6 +109,14 @@ counts toward the front-page tracker, so delete the test rows first.
   initial) and whose deposit is in, on the confirmation and tracking pages.
 - **Season:** Winter 2027, 20 steers; new orders roll to Spring 2027 when full.
 
+### Fixing a customer's name, email, phone or address
+
+Harvest roster → **Edit** under the customer's name → change it → **Save**. It updates the
+sheet's columns *and* the saved order the emails are built from (editing only the sheet's
+Email column does **not** change where invoices and receipts go). If the same email placed
+other orders, a checkbox offers to update those too — leave it off when one person ordered
+for someone else (that's how Connor Blakeman ended up under Josh's email).
+
 ### Payment receipts and "ready for pickup" (as of 2026-10-09)
 
 **One-time setup (≈3 min), after pasting the new `Code.gs`:**

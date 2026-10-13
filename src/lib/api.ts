@@ -116,6 +116,12 @@ export const removeSteer = (adminKey: string, id: string) =>
 export const pushAssignment = (adminKey: string, code: string, patch: { steer?: string; season?: SeasonId }) =>
   admin(adminKey, { action: "assign", code, ...patch });
 
+/** Fix a customer's contact details on one or more orders — the sheet's
+    columns and the saved order the emails read from, together. */
+export interface Contact { name: string; email: string; phone: string; address: string }
+export const pushContact = (adminKey: string, codes: string[], contact: Contact) =>
+  admin(adminKey, { action: "contact", codes, ...contact });
+
 export const pushSettings = (adminKey: string, settings: SeasonSettings) =>
   admin(adminKey, { action: "settings", ...settings });
 

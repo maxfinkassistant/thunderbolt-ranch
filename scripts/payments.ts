@@ -23,6 +23,7 @@ function makeSheet(name: string, grid: Grid) {
       const r0 = a - 1, c0 = (b as number) - 1;
       const rng: any = {
         getValues: () => Array.from({ length: c }, (_, i) => Array.from({ length: d }, (_, j) => grid[r0 + i]?.[c0 + j] ?? "")),
+        getValue: () => grid[r0]?.[c0] ?? "",
         setValue: (v: any) => { while (grid.length <= r0) grid.push([]); grid[r0][c0] = v; return rng; },
         setValues: (vs: any[][]) => { vs.forEach((row, i) => row.forEach((v, j) => { while (grid.length <= r0 + i) grid.push([]); grid[r0 + i][c0 + j] = v; })); return rng; },
         setNumberFormat: () => rng, setFontWeight: () => rng,
@@ -234,6 +235,29 @@ ok(L("txn_po")?.payout === "po_1" && /FIRST NATIONAL BANK OF OMAHA/.test(L("txn_
 ok(L("txn_new")?.payout === "" && L("txn_new")?.status === "pending", "not-yet-paid-out money has no payout");
 r = post({ key: "x", action: "stripe-ledger" });
 ok(r.ok === false && r.error === "bad key", "ledger needs the admin key");
+
+// H. contact edits: the sheet's columns and the saved order, together; nobody else touched
+ordersGrid.push(orderRow({ ...base, Code: "TR-SHARE1", Status: "processing", Name: "Josh Ranch", Email: "josh@example.com", Phone: "4025550000", Share: "quarter", Total: 1350, Deposit: 250, Balance: 1100, Season: "fall-2026" }));
+ordersGrid.push(orderRow({ ...base, Code: "TR-SHARE2", Status: "processing", Name: "Con Friend", Email: "josh@example.com", Phone: "4025550000", Share: "quarter", Total: 1350, Deposit: 250, Balance: 1100, Season: "fall-2026" }));
+r = post({ key: "k", action: "contact", codes: ["TR-SHARE2"], name: "Connor Friend", email: "connor@example.com", phone: "1 775 846 0889", address: "1 Elm St" });
+ok(r.ok && r.updated === 1, "contact edit saved: " + JSON.stringify(r));
+ok(cell("TR-SHARE2", "Name") === "Connor Friend" && cell("TR-SHARE2", "Email") === "connor@example.com" && cell("TR-SHARE2", "Phone") === "1 775 846 0889" && cell("TR-SHARE2", "Address") === "1 Elm St", "sheet columns updated");
+const saved = JSON.parse(cell("TR-SHARE2", "Order JSON"));
+ok(saved.name === "Connor Friend" && saved.email === "connor@example.com" && saved.phone === "1 775 846 0889" && saved.address === "1 Elm St" && saved.share === "quarter", "saved order updated, rest of it kept");
+ok(cell("TR-SHARE1", "Email") === "josh@example.com" && JSON.parse(cell("TR-SHARE1", "Order JSON")).name === "Josh Ranch", "the other order under the old email untouched");
+const before2 = outbox.length;
+sessions.plink_ach9 = [card(1000)];
+ordersGrid.find((x) => x[0] === "TR-SHARE2")![col("Pay link id")] = "plink_ach9";
+gs.syncPayments();
+ok(outbox.slice(before2).some((m) => m.to === "connor@example.com") && !outbox.slice(before2).some((m) => m.to === "josh@example.com"), "next email goes to the new address");
+r = post({ key: "k", action: "contact", codes: ["TR-SHARE1"], name: "", email: "josh@example.com", phone: "", address: "" });
+ok(r.ok === false && /name/.test(r.error), "empty name refused");
+r = post({ key: "k", action: "contact", codes: ["TR-SHARE1"], name: "Josh", email: "not-an-email", phone: "", address: "" });
+ok(r.ok === false && /email/.test(r.error), "bad email refused");
+r = post({ key: "k", action: "contact", codes: ["TR-NOPE"], name: "X", email: "x@example.com", phone: "", address: "" });
+ok(r.ok === false && /not found/.test(r.error), "unknown order refused");
+r = post({ key: "x", action: "contact", codes: ["TR-SHARE1"], name: "X", email: "x@example.com" });
+ok(r.ok === false && r.error === "bad key", "contact edit needs the admin key");
 
 console.log(`\n${bad} failures · ${outbox.length} emails · ${stripeCalls} Stripe calls`);
 

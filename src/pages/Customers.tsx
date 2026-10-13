@@ -18,7 +18,7 @@ import { downloadCutSheet, buildFilledCutSheet, bytesToBase64 } from "../lib/cut
 import { finalPrice, depositCredit } from "../lib/estimate";
 import {
   backendConfigured, checkAdminKey, fetchOffice, pushStatus,
-  pushSteer, removeSteer, pushAssignment, pushSettings, sendInvoice, checkStripe, checkDeposit, sendPickupReady, type Office,
+  pushSteer, removeSteer, pushAssignment, pushSettings, sendInvoice, checkStripe, checkDeposit, sendPickupReady, pushContact, type Contact, type Office,
 } from "../lib/api";
 import { refreshAvailability, steerCount } from "../lib/availability";
 import { csvDownload } from "../lib/csv";
@@ -92,6 +92,55 @@ async function exportCutSheets(orders: Order[], steers: Steer[], season: Season)
   const a = document.createElement("a");
   a.href = url; a.download = `thunderbolt-${slug(season.label)}-cut-sheets.pdf`; a.click();
   URL.revokeObjectURL(url);
+}
+
+/* A customer's name, email, phone and address, edited in place on the
+   roster. Other orders under the same email can come along, but only
+   when asked — one email sometimes placed orders for other people. */
+function ContactEditor({
+  order, others, onSave, onCancel,
+}: {
+  order: Order;
+  others: Order[];                 // this customer's other orders (same email)
+  onSave: (contact: Contact, codes: string[]) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [c, setC] = useState<Contact>({ name: order.name, email: order.email, phone: order.phone ?? "", address: order.address ?? "" });
+  const [all, setAll] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email.trim());
+  const valid = c.name.trim() !== "" && emailOk;
+  const field = (k: keyof Contact, label: string, type = "text") => (
+    <label className="contact-field">
+      <span>{label}</span>
+      <input className="admin-input" type={type} value={c[k]} onChange={(e) => setC({ ...c, [k]: e.target.value })} />
+    </label>
+  );
+  return (
+    <form className="contact-edit" onSubmit={async (e) => {
+      e.preventDefault();
+      if (!valid) return;
+      setBusy(true);
+      try { await onSave({ name: c.name.trim(), email: c.email.trim(), phone: c.phone.trim(), address: c.address.trim() }, [order.code, ...(all ? others.map((o) => o.code) : [])]); }
+      finally { setBusy(false); }
+    }}>
+      {field("name", "Name")}
+      {field("email", "Email", "email")}
+      {!emailOk && c.email.trim() !== "" && <span className="admin-sub" style={{ color: "var(--rust)" }}>Check the email</span>}
+      {field("phone", "Phone", "tel")}
+      {field("address", "Address")}
+      {others.length > 0 && (
+        <label className="small" style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
+          <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
+          <span>Also update their other {others.length === 1 ? "order" : `${others.length} orders`} ({others.map((o) => o.code).join(", ")})</span>
+        </label>
+      )}
+      <div className="row-actions">
+        <button className="btn btn-ghost" type="submit" disabled={!valid || busy}>{busy ? "Saving…" : "Save"}</button>
+        <button className="small" type="button" style={{ textDecoration: "underline" }} onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  );
 }
 
 /* One steer, editable in place. `steer` undefined = the blank "add" row. */
@@ -307,6 +356,7 @@ export default function Customers() {
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
   const [invoiceBusy, setInvoiceBusy] = useState<string | null>(null);
   const [pickupBusy, setPickupBusy] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);   // order code whose contact is open
   const [notice, setNotice] = useState<string | null>(null);
   const [exportSeason, setExportSeason] = useState<SeasonId>(CURRENT_SEASON);
   const [stripeNote, setStripeNote] = useState<string | null>(null);
@@ -421,6 +471,20 @@ export default function Customers() {
       setLoadError(`Couldn't send ${o.code}'s invoice: ${(e as Error).message}`);
     } finally {
       setInvoiceBusy(null);
+    }
+  };
+
+  /* contact fixes go to the sheet and the saved order together */
+  const saveContact = async (contact: Contact, codes: string[]) => {
+    setLoadError(null); setNotice(null);
+    try {
+      await pushContact(adminKey, codes, contact);
+      setRemote((o) => (o ? { ...o, orders: o.orders.map((x) => (codes.includes(x.code) ? { ...x, ...contact } : x)) } : o));
+      setNotice(`Updated ${contact.name}'s details on ${codes.join(", ")}.`);
+      setEditing(null);
+      setTick((t) => t + 1);
+    } catch (e) {
+      setLoadError(`Couldn't save ${codes[0]}: ${(e as Error).message === "unknown action" ? "the order script needs the update with contact editing — paste the new Code.gs and deploy a new version" : (e as Error).message}`);
     }
   };
 
@@ -597,8 +661,22 @@ export default function Customers() {
                 <tr key={o.code} className={o.status === "pending-deposit" ? "row-pending" : ""}>
                   <td className="mono">{o.code}{o.sample && <span className="admin-chip">sample</span>}{o.status === "pending-deposit" && <span className="admin-chip hot">no deposit</span>}{o.status !== "pending-deposit" && !o.sample && live && o.depositKind !== "covered" && !o.depositPaidAt && <span className="admin-chip hot" title="Nothing in the sheet's Deposit paid at — the invoice bills the full amount">no deposit on file</span>}</td>
                   <td>
-                    <div style={{ fontWeight: 600 }}>{o.name}</div>
-                    <div className="small mute">{o.email}{o.phone && ` · ${o.phone}`}</div>
+                    {editing === o.code ? (
+                      <ContactEditor
+                        order={o}
+                        others={orders.filter((x) => x.code !== o.code && x.email.toLowerCase() === o.email.toLowerCase())}
+                        onSave={saveContact}
+                        onCancel={() => setEditing(null)}
+                      />
+                    ) : (
+                      <>
+                        <div style={{ fontWeight: 600 }}>{o.name}</div>
+                        <div className="small mute">{o.email}{o.phone && ` · ${o.phone}`}</div>
+                        {live && !o.sample && (
+                          <button className="small" style={{ textDecoration: "underline" }} onClick={() => setEditing(o.code)}>Edit</button>
+                        )}
+                      </>
+                    )}
                   </td>
                   <td>{SHARES[o.share].label} · ~{SHARES[o.share].takehome} lb</td>
                   <td>
